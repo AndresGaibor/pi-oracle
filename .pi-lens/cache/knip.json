@@ -63,6 +63,11 @@
     },
     {
       "type": "file",
+      "name": "scripts/debug-pom.ts",
+      "file": "scripts/debug-pom.ts"
+    },
+    {
+      "type": "file",
       "name": "scripts/health-check.ts",
       "file": "scripts/health-check.ts"
     },
@@ -70,6 +75,11 @@
       "type": "file",
       "name": "scripts/poc-all.ts",
       "file": "scripts/poc-all.ts"
+    },
+    {
+      "type": "file",
+      "name": "scripts/setup-brave-profile.ts",
+      "file": "scripts/setup-brave-profile.ts"
     },
     {
       "type": "file",
@@ -85,6 +95,16 @@
       "type": "file",
       "name": "scripts/adapter-tests/run-tests.mjs",
       "file": "scripts/adapter-tests/run-tests.mjs"
+    },
+    {
+      "type": "file",
+      "name": "extensions/oracle/shared/login-utils.ts",
+      "file": "extensions/oracle/shared/login-utils.ts"
+    },
+    {
+      "type": "file",
+      "name": "extensions/oracle/shared/snapshot-utils.ts",
+      "file": "extensions/oracle/shared/snapshot-utils.ts"
     },
     {
       "type": "file",
@@ -107,6 +127,26 @@
       "file": "extensions/oracle/worker/run-job.ts"
     },
     {
+      "type": "file",
+      "name": "extensions/oracle/pages/base.page.ts",
+      "file": "extensions/oracle/pages/base.page.ts"
+    },
+    {
+      "type": "file",
+      "name": "extensions/oracle/pages/chatgpt/chatgpt-auth.page.ts",
+      "file": "extensions/oracle/pages/chatgpt/chatgpt-auth.page.ts"
+    },
+    {
+      "type": "file",
+      "name": "extensions/oracle/pages/chatgpt/chatgpt-selectors.ts",
+      "file": "extensions/oracle/pages/chatgpt/chatgpt-selectors.ts"
+    },
+    {
+      "type": "file",
+      "name": "extensions/oracle/pages/chatgpt/chatgpt.page.ts",
+      "file": "extensions/oracle/pages/chatgpt/chatgpt.page.ts"
+    },
+    {
       "type": "dependency",
       "name": "@steipete/sweet-cookie",
       "file": "package.json",
@@ -115,14 +155,14 @@
     {
       "type": "unlisted",
       "name": "@mariozechner/pi-coding-agent",
-      "file": "extensions/oracle/lib/config.ts",
-      "line": 4
+      "file": "extensions/oracle/lib/commands.ts",
+      "line": 5
     },
     {
       "type": "unlisted",
       "name": "@mariozechner/pi-coding-agent",
-      "file": "extensions/oracle/lib/commands.ts",
-      "line": 2
+      "file": "extensions/oracle/lib/config.ts",
+      "line": 5
     },
     {
       "type": "export",
@@ -174,27 +214,9 @@
     },
     {
       "type": "export",
-      "name": "OracleJobStatus",
-      "file": "extensions/oracle/lib/jobs.ts",
-      "line": 11
-    },
-    {
-      "type": "export",
-      "name": "OracleJobPhase",
-      "file": "extensions/oracle/lib/jobs.ts",
-      "line": 12
-    },
-    {
-      "type": "export",
       "name": "OracleArtifactRecord",
       "file": "extensions/oracle/lib/jobs.ts",
       "line": 64
-    },
-    {
-      "type": "export",
-      "name": "OracleJob",
-      "file": "extensions/oracle/lib/jobs.ts",
-      "line": 80
     },
     {
       "type": "export",
@@ -230,25 +252,13 @@
       "type": "unlisted",
       "name": "@mariozechner/pi-coding-agent",
       "file": "extensions/oracle/lib/tools.ts",
-      "line": 6
-    },
-    {
-      "type": "unlisted",
-      "name": "@mariozechner/pi-ai",
-      "file": "extensions/oracle/lib/tools.ts",
-      "line": 5
-    },
-    {
-      "type": "unlisted",
-      "name": "@sinclair/typebox",
-      "file": "extensions/oracle/lib/tools.ts",
-      "line": 7
+      "line": 20
     },
     {
       "type": "unlisted",
       "name": "@mariozechner/pi-coding-agent",
       "file": "extensions/oracle/index.ts",
-      "line": 3
+      "line": 6
     },
     {
       "type": "export",
@@ -392,27 +402,9 @@
     },
     {
       "type": "export",
-      "name": "OracleJobStatus",
-      "file": "extensions/oracle/lib/jobs.ts",
-      "line": 11
-    },
-    {
-      "type": "export",
-      "name": "OracleJobPhase",
-      "file": "extensions/oracle/lib/jobs.ts",
-      "line": 12
-    },
-    {
-      "type": "export",
       "name": "OracleArtifactRecord",
       "file": "extensions/oracle/lib/jobs.ts",
       "line": 64
-    },
-    {
-      "type": "export",
-      "name": "OracleJob",
-      "file": "extensions/oracle/lib/jobs.ts",
-      "line": 80
     },
     {
       "type": "export",
@@ -586,6 +578,11 @@
     },
     {
       "type": "file",
+      "name": "scripts/debug-pom.ts",
+      "file": "scripts/debug-pom.ts"
+    },
+    {
+      "type": "file",
       "name": "scripts/health-check.ts",
       "file": "scripts/health-check.ts"
     },
@@ -593,6 +590,11 @@
       "type": "file",
       "name": "scripts/poc-all.ts",
       "file": "scripts/poc-all.ts"
+    },
+    {
+      "type": "file",
+      "name": "scripts/setup-brave-profile.ts",
+      "file": "scripts/setup-brave-profile.ts"
     },
     {
       "type": "file",
@@ -608,6 +610,16 @@
       "type": "file",
       "name": "scripts/adapter-tests/run-tests.mjs",
       "file": "scripts/adapter-tests/run-tests.mjs"
+    },
+    {
+      "type": "file",
+      "name": "extensions/oracle/shared/login-utils.ts",
+      "file": "extensions/oracle/shared/login-utils.ts"
+    },
+    {
+      "type": "file",
+      "name": "extensions/oracle/shared/snapshot-utils.ts",
+      "file": "extensions/oracle/shared/snapshot-utils.ts"
     },
     {
       "type": "file",
@@ -628,6 +640,26 @@
       "type": "file",
       "name": "extensions/oracle/worker/run-job.ts",
       "file": "extensions/oracle/worker/run-job.ts"
+    },
+    {
+      "type": "file",
+      "name": "extensions/oracle/pages/base.page.ts",
+      "file": "extensions/oracle/pages/base.page.ts"
+    },
+    {
+      "type": "file",
+      "name": "extensions/oracle/pages/chatgpt/chatgpt-auth.page.ts",
+      "file": "extensions/oracle/pages/chatgpt/chatgpt-auth.page.ts"
+    },
+    {
+      "type": "file",
+      "name": "extensions/oracle/pages/chatgpt/chatgpt-selectors.ts",
+      "file": "extensions/oracle/pages/chatgpt/chatgpt-selectors.ts"
+    },
+    {
+      "type": "file",
+      "name": "extensions/oracle/pages/chatgpt/chatgpt.page.ts",
+      "file": "extensions/oracle/pages/chatgpt/chatgpt.page.ts"
     }
   ],
   "unusedDeps": [
@@ -642,14 +674,14 @@
     {
       "type": "unlisted",
       "name": "@mariozechner/pi-coding-agent",
-      "file": "extensions/oracle/lib/config.ts",
-      "line": 4
+      "file": "extensions/oracle/lib/commands.ts",
+      "line": 5
     },
     {
       "type": "unlisted",
       "name": "@mariozechner/pi-coding-agent",
-      "file": "extensions/oracle/lib/commands.ts",
-      "line": 2
+      "file": "extensions/oracle/lib/config.ts",
+      "line": 5
     },
     {
       "type": "unlisted",
@@ -667,26 +699,14 @@
       "type": "unlisted",
       "name": "@mariozechner/pi-coding-agent",
       "file": "extensions/oracle/lib/tools.ts",
-      "line": 6
-    },
-    {
-      "type": "unlisted",
-      "name": "@mariozechner/pi-ai",
-      "file": "extensions/oracle/lib/tools.ts",
-      "line": 5
-    },
-    {
-      "type": "unlisted",
-      "name": "@sinclair/typebox",
-      "file": "extensions/oracle/lib/tools.ts",
-      "line": 7
+      "line": 20
     },
     {
       "type": "unlisted",
       "name": "@mariozechner/pi-coding-agent",
       "file": "extensions/oracle/index.ts",
-      "line": 3
+      "line": 6
     }
   ],
-  "summary": "Found 60 issues"
+  "summary": "Found 63 issues"
 }

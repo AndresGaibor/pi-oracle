@@ -2,11 +2,25 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { StringEnum } from "@mariozechner/pi-ai";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { Type } from "@sinclair/typebox";
+// Local type definitions to replace missing external dependencies
+const StringEnum = (values: readonly string[], options?: object) => ({
+  type: "string",
+  enum: values,
+  ...options,
+});
+
+const Type = {
+  Object: (props: object) => ({ type: "object", properties: props }),
+  String: (opts: object) => ({ type: "string", ...opts }),
+  Array: (itemType: object, opts?: object) => ({ type: "array", items: itemType, ...opts }),
+  Optional: (t: object) => ({ ...t }),
+  Boolean: (opts: object) => ({ type: "boolean", ...opts }),
+};
+
+import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { isLockTimeoutError, withGlobalReconcileLock, withLock } from "./locks.js";
 import { loadOracleConfig, EFFORTS, MODEL_FAMILIES, type OracleEffort, type OracleModelFamily } from "./config.js";
+import { type OracleJob } from "./jobs.js";
 import {
   cancelOracleJob,
   createJob,
@@ -217,19 +231,30 @@ export function registerOracleTools(pi: ExtensionAPI, workerPath: string): void 
       "Only use autoSwitchToThinking with modelFamily=instant.",
     ],
     parameters: ORACLE_SUBMIT_PARAMS,
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+    async execute(
+      _toolCallId: string,
+      params: { prompt: string; files: string[]; modelFamily?: string; effort?: string; autoSwitchToThinking?: boolean; followUpJobId?: string },
+      _signal: AbortSignal | undefined,
+      _onUpdate: (update: { type: string; content?: string }) => void,
+      ctx: ExtensionContext,
+    ) {
       const config = loadOracleConfig(ctx.cwd);
       const originSessionFile = getSessionFile(ctx);
       const projectId = getProjectId(ctx.cwd);
       const sessionId = getSessionId(originSessionFile, projectId);
-      const modelFamily = params.modelFamily ?? config.defaults.modelFamily;
+      const modelFamily = (params.modelFamily ?? config.defaults.modelFamily) as OracleModelFamily;
       const requestedEffort = params.effort ?? config.defaults.effort;
-      const effort = modelFamily === "instant" ? undefined : requestedEffort;
+      const effort = modelFamily === "instant" ? undefined : (requestedEffort as OracleEffort | undefined);
       const rawAutoSwitchToThinking = params.autoSwitchToThinking ?? config.defaults.autoSwitchToThinking;
       const autoSwitchToThinking = modelFamily === "instant" ? rawAutoSwitchToThinking : false;
       const followUp = resolveFollowUp(params.followUpJobId, ctx.cwd);
 
-      validateSubmissionOptions(params, modelFamily, effort, autoSwitchToThinking);
+      validateSubmissionOptions(
+        { effort: params.effort as OracleEffort | undefined, autoSwitchToThinking: params.autoSwitchToThinking },
+        modelFamily,
+        effort,
+        autoSwitchToThinking,
+      );
       try {
         await withGlobalReconcileLock({ processPid: process.pid, source: "oracle_submit", cwd: ctx.cwd }, async () => {
           await reconcileStaleOracleJobs();
@@ -241,10 +266,11 @@ export function registerOracleTools(pi: ExtensionAPI, workerPath: string): void 
       const jobId = randomUUID();
       const tempArchivePath = join(tmpdir(), `oracle-archive-${jobId}.tar.zst`);
       const runtime = allocateRuntime(config);
-      let job;
+      let job: OracleJob | undefined;
+      let archiveSha256: string;
 
       try {
-        const archiveSha256 = await createArchive(ctx.cwd, params.files, tempArchivePath);
+        archiveSha256 = await createArchive(ctx.cwd, params.files, tempArchivePath);
         await withLock("admission", "global", { jobId, processPid: process.pid }, async () => {
           await acquireRuntimeLease(config, {
             jobId,
@@ -282,6 +308,7 @@ export function registerOracleTools(pi: ExtensionAPI, workerPath: string): void 
             runtime,
           );
         });
+        if (!job) throw new Error("Job creation failed");
         await rename(tempArchivePath, job.archivePath);
         const worker = await spawnWorker(workerPath, job.id);
         await updateJob(job.id, (current) => ({
@@ -313,7 +340,7 @@ export function registerOracleTools(pi: ExtensionAPI, workerPath: string): void 
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        if (job) {
+        if (job && job.id) {
           const failedAt = new Date().toISOString();
           await updateJob(job.id, (current) => ({
             ...current,
@@ -343,7 +370,13 @@ export function registerOracleTools(pi: ExtensionAPI, workerPath: string): void 
     label: "Oracle Read",
     description: "Read the status and outputs of a previously dispatched oracle job.",
     parameters: ORACLE_READ_PARAMS,
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+    async execute(
+      _toolCallId: string,
+      params: { jobId: string },
+      _signal: AbortSignal | undefined,
+      _onUpdate: (update: { type: string; content?: string }) => void,
+      ctx: ExtensionContext,
+    ) {
       const job = readJob(params.jobId);
       if (!job || job.projectId !== getProjectId(ctx.cwd)) {
         throw new Error(`Oracle job not found in this project: ${params.jobId}`);
@@ -387,7 +420,13 @@ export function registerOracleTools(pi: ExtensionAPI, workerPath: string): void 
     label: "Oracle Cancel",
     description: "Cancel an active oracle job.",
     parameters: ORACLE_CANCEL_PARAMS,
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+    async execute(
+      _toolCallId: string,
+      params: { jobId: string },
+      _signal: AbortSignal | undefined,
+      _onUpdate: (update: { type: string; content?: string }) => void,
+      ctx: ExtensionContext,
+    ) {
       const job = readJob(params.jobId);
       if (!job || job.projectId !== getProjectId(ctx.cwd)) {
         throw new Error(`Oracle job not found in this project: ${params.jobId}`);

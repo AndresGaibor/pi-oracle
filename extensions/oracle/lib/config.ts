@@ -16,10 +16,10 @@ export type OracleBrowserRunMode = (typeof BROWSER_RUN_MODES)[number];
 export const CLONE_STRATEGIES = ["apfs-clone", "copy"] as const;
 export type OracleCloneStrategy = (typeof CLONE_STRATEGIES)[number];
 
-const PRO_EFFORTS = [
+const PRO_EFFORTS: readonly OracleEffort[] = [
 	"standard",
 	"extended",
-] as const satisfies readonly OracleEffort[];
+];
 const ALLOWED_CHATGPT_ORIGINS = new Set([
 	"https://chatgpt.com",
 	"https://chat.openai.com",

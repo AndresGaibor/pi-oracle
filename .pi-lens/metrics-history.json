@@ -160,7 +160,132 @@
         }
       ],
       "trend": "stable"
+    },
+    "scripts/setup-brave-profile.ts": {
+      "latest": {
+        "commit": "0a9a87e",
+        "timestamp": "2026-04-03T20:04:29.489Z",
+        "mi": 53.1,
+        "cognitive": 0,
+        "nesting": 1,
+        "lines": 38,
+        "maxCyclomatic": 1,
+        "entropy": 4.33
+      },
+      "history": [
+        {
+          "commit": "0a9a87e",
+          "timestamp": "2026-04-03T20:04:29.489Z",
+          "mi": 53.1,
+          "cognitive": 0,
+          "nesting": 1,
+          "lines": 38,
+          "maxCyclomatic": 1,
+          "entropy": 4.33
+        }
+      ],
+      "trend": "stable"
+    },
+    "extensions/oracle/pages/chatgpt/chatgpt-auth.page.ts": {
+      "latest": {
+        "commit": "0a9a87e",
+        "timestamp": "2026-04-03T20:06:09.594Z",
+        "mi": 42.9,
+        "cognitive": 34,
+        "nesting": 4,
+        "lines": 98,
+        "maxCyclomatic": 12,
+        "entropy": 5.47
+      },
+      "history": [
+        {
+          "commit": "0a9a87e",
+          "timestamp": "2026-04-03T20:06:09.594Z",
+          "mi": 42.9,
+          "cognitive": 34,
+          "nesting": 4,
+          "lines": 98,
+          "maxCyclomatic": 12,
+          "entropy": 5.47
+        }
+      ],
+      "trend": "stable"
+    },
+    "extensions/oracle/lib/commands.ts": {
+      "latest": {
+        "commit": "5dc7bb1",
+        "timestamp": "2026-04-03T20:08:59.413Z",
+        "mi": 24.1,
+        "cognitive": 118,
+        "nesting": 5,
+        "lines": 192,
+        "maxCyclomatic": 36,
+        "entropy": 5.89
+      },
+      "history": [
+        {
+          "commit": "5dc7bb1",
+          "timestamp": "2026-04-03T20:08:59.413Z",
+          "mi": 24.1,
+          "cognitive": 118,
+          "nesting": 5,
+          "lines": 192,
+          "maxCyclomatic": 36,
+          "entropy": 5.89
+        }
+      ],
+      "trend": "stable"
+    },
+    "extensions/oracle/pages/chatgpt/chatgpt-selectors.ts": {
+      "latest": {
+        "commit": "5dc7bb1",
+        "timestamp": "2026-04-03T20:10:07.842Z",
+        "mi": 43.4,
+        "cognitive": 6,
+        "nesting": 3,
+        "lines": 82,
+        "maxCyclomatic": 2,
+        "entropy": 5.07
+      },
+      "history": [
+        {
+          "commit": "5dc7bb1",
+          "timestamp": "2026-04-03T20:10:07.842Z",
+          "mi": 43.4,
+          "cognitive": 6,
+          "nesting": 3,
+          "lines": 82,
+          "maxCyclomatic": 2,
+          "entropy": 5.07
+        }
+      ],
+      "trend": "stable"
+    },
+    "extensions/oracle/worker/run-job.ts": {
+      "latest": {
+        "commit": "1b594bc",
+        "timestamp": "2026-04-03T20:18:12.228Z",
+        "mi": 0,
+        "cognitive": 737,
+        "nesting": 6,
+        "lines": 1444,
+        "maxCyclomatic": 57,
+        "entropy": 7.93
+      },
+      "history": [
+        {
+          "commit": "1b594bc",
+          "timestamp": "2026-04-03T20:18:12.228Z",
+          "mi": 0,
+          "cognitive": 737,
+          "nesting": 6,
+          "lines": 1444,
+          "maxCyclomatic": 57,
+          "entropy": 7.93
+        }
+      ],
+      "trend": "stable"
     }
   },
-  "capturedAt": "2026-04-03T19:58:36.132Z"
+  "capturedAt": "2026-04-03T20:18:17.227Z"
 }

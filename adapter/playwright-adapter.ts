@@ -237,10 +237,11 @@ export async function snapshotText(pageToken: string): Promise<string> {
 			while (curr && curr.nodeType === 1) {
 				const tag = curr.tagName.toLowerCase();
 				let nth = 1;
-				const parent = curr.parentElement;
+				const parent: Element | null = curr.parentElement;
 				if (parent) {
+					const currTagName: string = curr.tagName;
 					const siblings = Array.from(parent.children).filter(
-						(c) => c.tagName === curr!.tagName,
+						(c: Element): boolean => c.tagName === currTagName,
 					);
 					if (siblings.length > 1) {
 						nth = siblings.indexOf(curr) + 1;
