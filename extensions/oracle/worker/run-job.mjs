@@ -13,18 +13,48 @@ if (!jobId) {
 const jobDir = `/tmp/oracle-${jobId}`;
 const jobPath = `${jobDir}/job.json`;
 const CHATGPT_LABELS = {
-  composer: "Chat with ChatGPT",
-  addFiles: "Add files and more",
-  send: "Send prompt",
-  close: "Close",
-  autoSwitchToThinking: "Auto-switch to Thinking",
-  configure: "Configure...",
+  composer: ["Chat with ChatGPT", "Chatear con ChatGPT", "Pregunta lo que quieras"],
+  addFiles: ["Add files and more", "Agregar archivos y más"],
+  send: ["Send prompt", "Send message", "Enviar prompt", "Enviar mensaje", "Enviar"],
+  close: ["Close", "Cerrar"],
+  autoSwitchToThinking: ["Auto-switch to Thinking", "Cambio automático a Thinking", "Cambio automático a Pensando"],
+  configure: ["Configure...", "Configurar..."],
+  modelSelector: ["Model selector", "Selector de modelo"],
 };
+
+function labelMatches(label, candidates) {
+  return typeof label === 'string' && candidates.includes(label);
+}
+
+function snapshotHasLabel(snapshot, kind, labels) {
+  return labels.some((label) => snapshot.includes(`${kind} "${label}"`));
+}
+
+function findLabeledEntry(snapshot, kind, labels, predicate = () => true) {
+  return findEntry(snapshot, (candidate) => candidate.kind === kind && labelMatches(candidate.label, labels) && predicate(candidate));
+}
 const MODEL_FAMILY_PREFIX = {
   instant: "Instant ",
   thinking: "Thinking ",
   pro: "Pro ",
 };
+
+const EFFORT_LABELS = {
+  light: ["Light", "Ligero"],
+  standard: ["Standard", "Estándar", "Ampliado", "Razonamiento ampliado"],
+  extended: ["Extended", "Extendido"],
+  heavy: ["Heavy", "Alto"],
+};
+
+function effortLabelsFor(effortLabel) {
+  if (!effortLabel) return [];
+  const key = effortLabel.toLowerCase();
+  return EFFORT_LABELS[key] || [effortLabel];
+}
+
+function allEffortLabels() {
+  return [...new Set(Object.values(EFFORT_LABELS).flat())];
+}
 
 const ORACLE_STATE_DIR = "/tmp/pi-oracle-state";
 const LOCKS_DIR = join(ORACLE_STATE_DIR, "locks");
@@ -554,42 +584,61 @@ function requestedEffortLabel(job) {
 
 function effortSelectionVisible(snapshot, effortLabel) {
   if (!effortLabel) return true;
+  const labels = effortLabelsFor(effortLabel);
   const entries = parseSnapshotEntries(snapshot);
   return entries.some((entry) => {
     if (entry.disabled) return false;
-    if (entry.kind === "combobox" && entry.value === effortLabel) return true;
+    if (entry.kind === "combobox" && labels.includes(entry.value || "")) return true;
     if (entry.kind !== "button") return false;
     const label = String(entry.label || "").toLowerCase();
-    const normalizedEffort = effortLabel.toLowerCase();
-    return (
-      label === normalizedEffort ||
-      label === `${normalizedEffort} thinking` ||
-      label === `${normalizedEffort}, click to remove` ||
-      label === `${normalizedEffort} thinking, click to remove`
-    );
+    return labels.some((candidate) => {
+      const normalizedEffort = candidate.toLowerCase();
+      return (
+        label === normalizedEffort ||
+        label === `${normalizedEffort} thinking` ||
+        label === `${normalizedEffort}, click to remove` ||
+        label === `${normalizedEffort} thinking, click to remove`
+      );
+    });
   });
 }
 
+function visibleEffortLabel(snapshot) {
+  const entries = parseSnapshotEntries(snapshot);
+  const labels = allEffortLabels();
+  const comboboxEntry = entries.find(
+    (entry) => entry.kind === "combobox" && entry.value && labels.includes(entry.value) && !entry.disabled,
+  );
+  if (comboboxEntry?.value) return comboboxEntry.value;
+  const buttonEntry = entries.find((entry) => {
+    if (entry.kind !== "button" || entry.disabled || !entry.label) return false;
+    const label = String(entry.label);
+    return labels.some((candidate) => {
+      const normalized = candidate.toLowerCase();
+      const lowered = label.toLowerCase();
+      return (
+        lowered === normalized ||
+        lowered === `${normalized} thinking` ||
+        lowered === `${normalized}, click to remove` ||
+        lowered === `${normalized} thinking, click to remove`
+      );
+    });
+  });
+  return buttonEntry?.label || undefined;
+}
+
 function thinkingChipVisible(snapshot) {
-  return /button "(?:Light|Standard|Extended|Heavy)(?: thinking)?(?:, click to remove)?"/i.test(snapshot);
+  return /button "(?:Light|Standard|Extended|Heavy|Ligero|Estándar|Ampliado|Extendido|Alto|Razonamiento ampliado)(?: thinking)?(?:, click to remove)?"/i.test(snapshot);
 }
 
 function snapshotHasModelConfigurationUi(snapshot) {
   const entries = parseSnapshotEntries(snapshot);
-  const visibleFamilies = new Set(
-    entries
-      .filter((entry) => entry.kind === "button" && typeof entry.label === "string")
-      .flatMap((entry) =>
-        Object.entries(MODEL_FAMILY_PREFIX)
-          .filter(([, prefix]) => entry.label.startsWith(prefix))
-          .map(([family]) => family),
-      ),
-  );
-  const hasCloseButton = entries.some((entry) => entry.kind === "button" && entry.label === CHATGPT_LABELS.close && !entry.disabled);
+  const hasCloseButton = entries.some((entry) => entry.kind === "button" && labelMatches(entry.label, CHATGPT_LABELS.close) && !entry.disabled);
   const hasEffortCombobox = entries.some(
-    (entry) => entry.kind === "combobox" && ["Light", "Standard", "Extended", "Heavy"].includes(entry.value || "") && !entry.disabled,
+    (entry) => entry.kind === "combobox" && allEffortLabels().includes(entry.value || "") && !entry.disabled,
   );
-  return visibleFamilies.size >= 2 || hasCloseButton || hasEffortCombobox;
+  const hasConfigureAction = entries.some((entry) => entry.kind === "menuitem" && labelMatches(entry.label, CHATGPT_LABELS.configure) && !entry.disabled);
+  return hasCloseButton || hasEffortCombobox || hasConfigureAction;
 }
 
 function snapshotStronglyMatchesRequestedModel(snapshot, job) {
@@ -622,21 +671,23 @@ async function clickRef(job, ref) {
 }
 
 async function clickLabeledEntry(job, label, options = {}) {
+  const labels = Array.isArray(label) ? label : [label];
   const snapshot = await snapshotText(job);
   const entry = (options.last ? findLastEntry : findEntry)(
     snapshot,
-    (candidate) => candidate.label === label && (!options.kind || candidate.kind === options.kind) && !candidate.disabled,
+    (candidate) => labelMatches(candidate.label, labels) && (!options.kind || candidate.kind === options.kind) && !candidate.disabled,
   );
-  if (!entry) throw new Error(`Could not find labeled entry: ${label}`);
+  if (!entry) throw new Error(`Could not find labeled entry: ${labels.join(" / ")}`);
   await clickRef(job, entry.ref);
   return entry;
 }
 
 async function maybeClickLabeledEntry(job, label, options = {}) {
+  const labels = Array.isArray(label) ? label : [label];
   const snapshot = await snapshotText(job);
   const entry = (options.last ? findLastEntry : findEntry)(
     snapshot,
-    (candidate) => candidate.label === label && (!options.kind || candidate.kind === options.kind) && !candidate.disabled,
+    (candidate) => labelMatches(candidate.label, labels) && (!options.kind || candidate.kind === options.kind) && !candidate.disabled,
   );
   if (!entry) return false;
   await clickRef(job, entry.ref);
@@ -645,7 +696,7 @@ async function maybeClickLabeledEntry(job, label, options = {}) {
 
 async function openEffortDropdown(job) {
   const snapshot = await snapshotText(job);
-  const effortLabels = new Set(["Light", "Standard", "Extended", "Heavy"]);
+  const effortLabels = new Set(allEffortLabels());
   const entry = findEntry(
     snapshot,
     (candidate) => candidate.kind === "combobox" && candidate.value && effortLabels.has(candidate.value) && !candidate.disabled,
@@ -657,7 +708,7 @@ async function openEffortDropdown(job) {
 
 async function setComposerText(job, text) {
   const snapshot = await snapshotText(job);
-  const entry = findEntry(snapshot, (candidate) => candidate.kind === "textbox" && candidate.label === CHATGPT_LABELS.composer);
+  const entry = findLabeledEntry(snapshot, "textbox", CHATGPT_LABELS.composer);
   if (!entry) throw new Error("Could not find ChatGPT composer textbox");
   await agentBrowser(job, "fill", entry.ref, text);
 }
@@ -690,9 +741,9 @@ function classifyChatPage({ job, url, snapshot, body, probe }) {
   const allowedOrigins = [new URL(job.config.browser.chatUrl).origin, "https://auth.openai.com"];
   const onAllowedOrigin = typeof url === "string" && allowedOrigins.some((origin) => url.startsWith(origin));
   const onAuthPath = typeof url === "string" && url.includes("/auth/");
-  const hasComposer = snapshot.includes(`textbox "${CHATGPT_LABELS.composer}"`);
-  const hasAddFiles = snapshot.includes(`button "${CHATGPT_LABELS.addFiles}"`);
-  const hasModelControl = snapshot.includes('button "Model selector"') || /button "(Instant|Thinking|Pro)(?: [^"]*)?"/.test(snapshot);
+  const hasComposer = snapshotHasLabel(snapshot, "textbox", CHATGPT_LABELS.composer);
+  const hasAddFiles = snapshotHasLabel(snapshot, "button", CHATGPT_LABELS.addFiles);
+  const hasModelControl = snapshotHasLabel(snapshot, "button", CHATGPT_LABELS.modelSelector) || /button "(Instant|Thinking|Pro)(?: [^"]*)?"/.test(snapshot);
 
   if (probe?.status === 401 || probe?.status === 403) {
     return { state: "login_required", message: "ChatGPT login is required. Run /oracle-auth." };
@@ -804,7 +855,7 @@ function composerSnapshotSlice(snapshot) {
   const lines = snapshot.split("\n");
   let composerIndex = -1;
   for (let index = lines.length - 1; index >= 0; index -= 1) {
-    if (lines[index].includes(`textbox "${CHATGPT_LABELS.composer}"`)) {
+    if (snapshotHasLabel(lines[index], "textbox", CHATGPT_LABELS.composer)) {
       composerIndex = index;
       break;
     }
@@ -835,7 +886,7 @@ async function waitForUploadConfirmed(job, fileLabel, baselineCount) {
 
     const sendEntry = findEntry(
       snapshot,
-      (candidate) => candidate.kind === "button" && candidate.label === CHATGPT_LABELS.send && !candidate.disabled,
+      (candidate) => candidate.kind === "button" && labelMatches(candidate.label, CHATGPT_LABELS.send) && !candidate.disabled,
     );
     const fileCount = composerFileEntryCount(snapshot, fileLabel);
 
@@ -865,12 +916,12 @@ async function waitForSendReady(job) {
 
     const entry = findEntry(
       snapshot,
-      (candidate) => candidate.kind === "button" && candidate.label === CHATGPT_LABELS.send && !candidate.disabled,
+      (candidate) => candidate.kind === "button" && labelMatches(candidate.label, CHATGPT_LABELS.send) && !candidate.disabled,
     );
     if (entry) return entry;
     await sleep(1000);
   }
-  throw new Error(`Timed out waiting for ${CHATGPT_LABELS.send} to become enabled`);
+  throw new Error(`Timed out waiting for ${CHATGPT_LABELS.send.join(" / ")} to become enabled`);
 }
 
 async function clickSend(job) {
@@ -880,7 +931,7 @@ async function clickSend(job) {
 
 async function openModelConfiguration(job) {
   const openerPredicates = [
-    (candidate) => candidate.kind === "button" && candidate.label === "Model selector" && !candidate.disabled,
+    (candidate) => candidate.kind === "button" && labelMatches(candidate.label, CHATGPT_LABELS.modelSelector) && !candidate.disabled,
     (candidate) => candidate.kind === "button" && ["Instant", "Thinking", "Pro"].includes(candidate.label || "") && !candidate.disabled,
   ];
 
@@ -898,7 +949,7 @@ async function openModelConfiguration(job) {
 
     const configureEntry = findEntry(
       after,
-      (candidate) => candidate.kind === "menuitem" && candidate.label === CHATGPT_LABELS.configure && !candidate.disabled,
+      (candidate) => candidate.kind === "menuitem" && labelMatches(candidate.label, CHATGPT_LABELS.configure) && !candidate.disabled,
     );
 
     if (configureEntry) {
@@ -941,18 +992,31 @@ async function configureModel(job) {
     if (effortLabel && !effortSelectionVisible(familySnapshot, effortLabel)) {
       const opened = await openEffortDropdown(job);
       if (!opened) {
-        throw new Error(`Could not open effort dropdown for requested effort: ${effortLabel}`);
-      }
-      await agentBrowser(job, "wait", "300");
-      await clickLabeledEntry(job, effortLabel, { kind: "option" });
-      await agentBrowser(job, "wait", "400");
-      const effortSnapshot = await snapshotText(job);
-      const selectedEffort = findEntry(
-        effortSnapshot,
-        (candidate) => candidate.kind === "combobox" && candidate.value === effortLabel && !candidate.disabled,
-      );
-      if (!selectedEffort && !effortSelectionVisible(effortSnapshot, effortLabel)) {
-        throw new Error(`Requested effort did not remain selected: ${effortLabel}`);
+        await log(
+          `Could not open effort dropdown for requested effort ${effortLabel}; continuing with visible effort ${visibleEffortLabel(familySnapshot) || "unknown"}`,
+        );
+      } else {
+        await agentBrowser(job, "wait", "300");
+        let clicked = false;
+        try {
+          await clickLabeledEntry(job, effortLabelsFor(effortLabel), { kind: "option" });
+          clicked = true;
+        } catch (error) {
+          await log(`Could not click requested effort ${effortLabel}; continuing with current UI state: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        if (clicked) {
+          await agentBrowser(job, "wait", "400");
+          const effortSnapshot = await snapshotText(job);
+          const selectedEffort = findEntry(
+            effortSnapshot,
+            (candidate) => candidate.kind === "combobox" && effortLabelsFor(effortLabel).includes(candidate.value || "") && !candidate.disabled,
+          );
+          if (!selectedEffort && !effortSelectionVisible(effortSnapshot, effortLabel)) {
+            await log(
+              `Requested effort ${effortLabel} did not remain selected; continuing with visible effort ${visibleEffortLabel(effortSnapshot) || "unknown"}`,
+            );
+          }
+        }
       }
     }
   }
@@ -982,7 +1046,7 @@ async function uploadArchive(job) {
   const baselineComposerFileCount = composerFileEntryCount(addFilesSnapshot, fileLabel);
   const addFilesEntry = findEntry(
     addFilesSnapshot,
-    (candidate) => candidate.label === CHATGPT_LABELS.addFiles && candidate.kind === "button",
+    (candidate) => candidate.kind === "button" && labelMatches(candidate.label, CHATGPT_LABELS.addFiles),
   );
   if (!addFilesEntry) {
     throw new Error(`Could not find "${CHATGPT_LABELS.addFiles}" button`);
@@ -1002,8 +1066,12 @@ async function assistantMessages(job) {
   const result = await evalPage(
     job,
     toJsonScript(`
-      const headings = Array.from(document.querySelectorAll('h1,h2,h3,h4,h5,h6,[role="heading"]'))
-        .filter((el) => (el.textContent || '').trim() === 'ChatGPT said:');
+      const turnStartAssistantMessages = Array.from(
+        document.querySelectorAll('[data-message-author-role="assistant"][data-turn-start-message="true"]'),
+      );
+      const assistantMessages = turnStartAssistantMessages.length
+        ? turnStartAssistantMessages
+        : Array.from(document.querySelectorAll('[data-message-author-role="assistant"]'));
       const renderText = (node) => {
         if (!node) return '';
         const clone = node.cloneNode(true);
@@ -1017,7 +1085,10 @@ async function assistantMessages(job) {
         document.body.appendChild(host);
         let text = (host.innerText || host.textContent || '').trim();
         host.remove();
-        const endings = ['\\nChatGPT can make mistakes. Check important info.'];
+        const endings = [
+          '\\nChatGPT can make mistakes. Check important info.',
+          '\\nChatGPT puede cometer errores. Comprueba la información importante.',
+        ];
         for (const ending of endings) {
           if (text.includes(ending)) text = text.split(ending)[0].trim();
         }
@@ -1030,7 +1101,7 @@ async function assistantMessages(job) {
         return text;
       };
       return {
-        messages: headings.map((heading) => ({ text: renderText(heading.nextElementSibling) })),
+        messages: assistantMessages.map((message) => ({ text: renderText(message) })),
       };
     `),
   );
@@ -1041,7 +1112,9 @@ async function assistantMessages(job) {
 
 function assistantSnapshotSlice(snapshot, responseIndex) {
   const lines = snapshot.split("\n");
-  const assistantHeadingIndices = lines.flatMap((line, index) => (line.includes('heading "ChatGPT said:"') ? [index] : []));
+  const assistantHeadingIndices = lines.flatMap((line, index) =>
+    line.includes('heading "ChatGPT said:"') || line.includes('heading "ChatGPT dijo:"') ? [index] : [],
+  );
   const startIndex = assistantHeadingIndices[responseIndex];
   if (startIndex === undefined) return undefined;
 
@@ -1050,7 +1123,7 @@ function assistantSnapshotSlice(snapshot, responseIndex) {
   if (nextAssistantIndex !== undefined) endCandidates.push(nextAssistantIndex);
 
   const composerIndex = lines.findIndex(
-    (line, index) => index > startIndex && line.includes(`textbox "${CHATGPT_LABELS.composer}"`),
+    (line, index) => index > startIndex && snapshotHasLabel(line, "textbox", CHATGPT_LABELS.composer),
   );
   if (composerIndex !== -1) endCandidates.push(composerIndex);
 
@@ -1087,6 +1160,12 @@ async function waitForStableChatUrl(job, previousChatUrl) {
   return previousChatUrl || stripQuery(await currentUrl(job));
 }
 
+function snapshotShowsCompletedResponse(snapshot) {
+  const hasStopStreaming = /Stop streaming|Detener la transmisión|Detener streaming/i.test(snapshot);
+  const hasCopyResponse = /Copy response|Copiar respuesta/i.test(snapshot);
+  return hasCopyResponse && !hasStopStreaming;
+}
+
 async function waitForChatCompletion(job, baselineAssistantCount) {
   const timeoutAt = Date.now() + job.config.worker.completionTimeoutMs;
   let lastText = "";
@@ -1095,18 +1174,16 @@ async function waitForChatCompletion(job, baselineAssistantCount) {
   while (Date.now() < timeoutAt) {
     await heartbeat();
     const snapshot = await snapshotText(job);
-    const hasStopStreaming = snapshot.includes("Stop streaming");
-    const copyResponseCount = (snapshot.match(/Copy response/g) || []).length;
     const messages = await assistantMessages(job);
     const targetMessage = messages[baselineAssistantCount];
     const targetText = targetMessage?.text || "";
-    const hasTargetCopyResponse = copyResponseCount > baselineAssistantCount;
+    const hasCompletedResponse = snapshotShowsCompletedResponse(snapshot);
 
-    if (!hasStopStreaming && hasTargetCopyResponse && targetText) {
+    if (targetText && hasCompletedResponse) {
       if (targetText === lastText) stableCount += 1;
       else stableCount = 1;
       lastText = targetText;
-      if (stableCount >= 2) {
+      if (stableCount >= 3) {
         return { responseIndex: baselineAssistantCount, responseText: targetText };
       }
     }
@@ -1150,13 +1227,13 @@ function artifactCandidatesFromEntries(entries) {
     "Share",
     "Switch model",
     "More actions",
-    CHATGPT_LABELS.addFiles,
+    ...CHATGPT_LABELS.addFiles,
     "Start dictation",
     "Start Voice",
-    "Model selector",
+    ...CHATGPT_LABELS.modelSelector,
     "Open conversation options",
     "Scroll to bottom",
-    CHATGPT_LABELS.close,
+    ...CHATGPT_LABELS.close,
   ]);
 
   const seen = new Set();
@@ -1358,8 +1435,7 @@ async function run() {
     await launchBrowser(currentJob, targetUrl);
     currentJob = await mutateJob((job) => ({ ...job, ...phasePatch("verifying_auth", { heartbeatAt: new Date().toISOString() }) }));
     await waitForOracleReady(currentJob);
-    currentJob = await mutateJob((job) => ({ ...job, ...phasePatch("configuring_model", { heartbeatAt: new Date().toISOString() }) }));
-    await configureModel(currentJob);
+    await log("Skipping model configuration; using the model already active in ChatGPT UI");
     currentJob = await mutateJob((job) => ({ ...job, ...phasePatch("uploading_archive", { heartbeatAt: new Date().toISOString() }) }));
     await uploadArchive(currentJob);
     await setComposerText(currentJob, await readFile(currentJob.promptPath, "utf8"));

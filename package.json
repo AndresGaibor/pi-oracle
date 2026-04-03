@@ -6,7 +6,14 @@
   "license": "MIT",
   "author": "Mitch Fultz (https://github.com/fitchmultz)",
   "type": "module",
-  "keywords": ["pi-package", "pi", "pi-extension", "extension", "chatgpt", "oracle"],
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-extension",
+    "extension",
+    "chatgpt",
+    "oracle"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/fitchmultz/pi-oracle.git"
@@ -24,19 +31,25 @@
     "LICENSE"
   ],
   "pi": {
-    "extensions": ["./extensions/oracle/index.ts"]
+    "extensions": [
+      "./extensions/oracle/index.ts"
+    ]
   },
   "scripts": {
     "check:oracle-extension": "node --check extensions/oracle/worker/run-job.mjs && node --check extensions/oracle/worker/auth-cookie-policy.mjs && node --check extensions/oracle/worker/auth-bootstrap.mjs && esbuild extensions/oracle/index.ts --bundle --platform=node --format=esm --external:@mariozechner/pi-coding-agent --external:@mariozechner/pi-ai --external:@sinclair/typebox --outfile=/tmp/pi-oracle-extension-check.js",
     "sanity:oracle": "tsx scripts/oracle-sanity.ts",
-    "pack:check": "npm pack --dry-run"
+    "pack:check": "npm pack --dry-run",
+    "playwright-install": "bunx playwright install",
+    "playwright-check": "bun scripts/playwright-check.js"
   },
   "dependencies": {
     "@steipete/sweet-cookie": "^0.2.0"
   },
   "devDependencies": {
     "esbuild": "^0.27.0",
-    "tsx": "^4.20.6"
+    "playwright": "^1.59.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.3.3"
   },
   "engines": {
     "node": ">=20"

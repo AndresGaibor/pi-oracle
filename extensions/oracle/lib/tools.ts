@@ -206,10 +206,12 @@ export function registerOracleTools(pi: ExtensionAPI, workerPath: string): void 
     label: "Oracle Submit",
     description:
       "Dispatch a background ChatGPT web oracle job after gathering context. Always pass a prompt and exact project-relative archive inputs.",
-    promptSnippet: "Dispatch a background ChatGPT web oracle job after gathering repo context.",
+    promptSnippet: "Dispatch a background ChatGPT web oracle job after gathering repo context and confirming file existence.",
     promptGuidelines: [
       "Gather context before calling oracle_submit.",
+      "Verify every archive path exists in the repo before calling oracle_submit; never invent placeholders like CONTEXT.md.",
       "Always include a narrowly scoped archive of exact relevant files/directories.",
+      "If a desired context file is missing, choose a real existing alternative instead of retrying with the missing name.",
       "Stop after dispatching oracle_submit; do not continue the task while the oracle job is running.",
       "If oracle_submit fails, stop and report the error instead of retrying automatically.",
       "Only use autoSwitchToThinking with modelFamily=instant.",

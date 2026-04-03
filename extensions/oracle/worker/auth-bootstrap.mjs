@@ -15,9 +15,18 @@ if (!rawConfig) {
 
 const config = JSON.parse(rawConfig);
 const CHATGPT_LABELS = {
-  composer: "Chat with ChatGPT",
-  addFiles: "Add files and more",
+  composer: ["Chat with ChatGPT", "Chatear con ChatGPT", "Pregunta lo que quieras"],
+  addFiles: ["Add files and more", "Agregar archivos y más"],
+  modelSelector: ["Model selector", "Selector de modelo"],
 };
+
+function labelMatches(label, candidates) {
+  return typeof label === "string" && candidates.includes(label);
+}
+
+function snapshotHasLabel(snapshot, kind, labels) {
+  return labels.some((label) => snapshot.includes(`${kind} "${label}"`));
+}
 const LOGIN_PROBE_TIMEOUT_MS = 5_000;
 const CHATGPT_COOKIE_ORIGINS = [
   "https://chatgpt.com",
@@ -482,7 +491,17 @@ function buildLoginProbeScript(timeoutMs) {
       const textMatches = (text) => {
         if (!text) return false;
         const normalized = text.toLowerCase().trim();
-        return ['log in', 'login', 'sign in', 'signin', 'continue with'].some((needle) => normalized.startsWith(needle));
+        return [
+          'log in',
+          'login',
+          'sign in',
+          'signin',
+          'continue with',
+          'iniciar sesión',
+          'iniciar sesion',
+          'acceder',
+          'entrar',
+        ].some((needle) => normalized.startsWith(needle));
       };
       for (const node of candidates) {
         if (!(node instanceof HTMLElement)) continue;
@@ -633,11 +652,9 @@ function classifyChatPage({ url, snapshot, body, probe }) {
   }
 
   const onAllowedOrigin = allowedOrigins.some((origin) => url.startsWith(origin));
-  const hasComposer = snapshot.includes(`textbox \"${CHATGPT_LABELS.composer}\"`);
-  const hasAddFiles = snapshot.includes(`button \"${CHATGPT_LABELS.addFiles}\"`);
-  const hasModelControl =
-    snapshot.includes('button "Model selector"') ||
-    /button "(Instant|Thinking|Pro)(?: [^"]*)?"/.test(snapshot);
+  const hasComposer = snapshotHasLabel(snapshot, "textbox", CHATGPT_LABELS.composer);
+  const hasAddFiles = snapshotHasLabel(snapshot, "button", CHATGPT_LABELS.addFiles);
+  const hasModelControl = snapshotHasLabel(snapshot, "button", CHATGPT_LABELS.modelSelector) || /button "(Instant|Thinking|Pro)(?: [^"]*)?"/.test(snapshot);
 
   if (probe?.status === 401 || probe?.status === 403) {
     return {
@@ -717,7 +734,7 @@ async function maybeSelectAccountIdentity(snapshot, probe) {
 
   const loginEntry = findLastEntry(
     snapshot,
-    (candidate) => candidate.kind === "button" && candidate.label === "Log in" && !candidate.disabled,
+    (candidate) => candidate.kind === "button" && labelMatches(candidate.label, ["Log in", "Iniciar sesión", "Acceder", "Entrar"]) && !candidate.disabled,
   );
   if (loginEntry) {
     await log(`Clicking visible Log in CTA via ${loginEntry.ref} while backend session is already authenticated`);
@@ -750,7 +767,7 @@ async function waitForImportedAuthReady() {
     await writeFile(BODY_PATH, `${body}\n`, { mode: 0o600 }).catch(() => undefined);
     const classification = classifyChatPage({ url, snapshot, body, probe });
     await log(
-      `poll ${iteration}: url=${JSON.stringify(url)} probe=${JSON.stringify(probe)} classification=${classification.state} hasComposer=${snapshot.includes(`textbox \"${CHATGPT_LABELS.composer}\"`)} hasAddFiles=${snapshot.includes(`button \"${CHATGPT_LABELS.addFiles}\"`)}`,
+      `poll ${iteration}: url=${JSON.stringify(url)} probe=${JSON.stringify(probe)} classification=${classification.state} hasComposer=${snapshotHasLabel(snapshot, "textbox", CHATGPT_LABELS.composer)} hasAddFiles=${snapshotHasLabel(snapshot, "button", CHATGPT_LABELS.addFiles)}`,
     );
     if (classification.state === "authenticated_and_ready") return classification;
     if (classification.state === "auth_transitioning") {
