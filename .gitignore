@@ -2,3 +2,10 @@ node_modules/
 .DS_Store
 .pi/
 .oracle-context/
+
+# Runtime artifacts
+.debug-user-data/
+.poc-user-data/
+adapter-tests/tmp-profile/
+*.tsbuildinfo
+dist/

@@ -8,7 +8,7 @@ import { registerOracleTools } from "./lib/tools.js";
 
 export default function oracleExtension(pi: ExtensionAPI) {
   const extensionDir = dirname(fileURLToPath(import.meta.url));
-  const workerPath = join(extensionDir, "worker", "run-job.mjs");
+  const workerPath = join(extensionDir, "worker", "run-job.sh");
   const authWorkerPath = join(extensionDir, "worker", "run-auth-bootstrap.sh");
 
   registerOracleCommands(pi, authWorkerPath);

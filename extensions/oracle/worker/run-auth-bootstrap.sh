@@ -7,6 +7,6 @@ if [ -z "$1" ]; then
   exit 1
 fi
 
-export USE_PLAYWRIGHT=${USE_PLAYWRIGHT:-0}
+export USE_PLAYWRIGHT=${USE_PLAYWRIGHT:-1}
 # Run with bun directly (bun can run TS files)
 bun run ./extensions/oracle/worker/auth-bootstrap.ts "$1"

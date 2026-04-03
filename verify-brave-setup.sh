@@ -67,7 +67,7 @@ echo ""
 
 # 6. Verificar extensión oracle
 echo "6️⃣ Verificando extensión oracle..."
-if [ -d "/Users/andresgaibor/code/javascript/pi-extensions/pi-oracle/extensions/oracle" ]; then
+if [ -d "$HOME/code/javascript/pi-extensions/pi-oracle/extensions/oracle" ]; then
     echo "   ✅ Extensión oracle instalada desde: $(pwd)"
 else
     echo "   ⚠️  Ejecuta este script desde el directorio pi-oracle"
