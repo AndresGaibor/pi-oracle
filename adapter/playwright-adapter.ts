@@ -8,6 +8,7 @@ let pages = new Map<string, import("playwright").Page>();
 let elements = new Map<string, { pageToken: string; selector: string }>();
 let pageCounter = 0;
 let elementCounter = 0;
+let mainPageToken: string | null = null;
 
 function ensureFlag(): void {
   if (process.env.USE_PLAYWRIGHT !== "1") {
@@ -39,6 +40,13 @@ export async function launchPersistent(userDataDir?: string) {
     headless,
     acceptDownloads: true,
   });
+
+  // create a main page so callers can use simple open/getUrl APIs
+  const pg = await context.newPage();
+  pageCounter += 1;
+  const token = `p${pageCounter}`;
+  pages.set(token, pg);
+  mainPageToken = token;
   return context;
 }
 
@@ -71,6 +79,7 @@ export async function close() {
   context = null;
   pages.clear();
   elements.clear();
+  mainPageToken = null;
 }
 
 /**
@@ -116,11 +125,18 @@ function resolveRef(refOrToken: string, pageTokenHint?: string) {
 export async function evaluate(pageRef: string, script: string): Promise<any> {
   ensureFlag();
   const page = resolvePage(pageRef);
-  // run the script in the page context by wrapping in a function that returns the expression
   try {
-    const fn = new Function(`return (${script});`);
-    // evaluate in node to check for trivial JSON? No — we must run in page
-    const result = await page.evaluate(fn as any);
+    // Execute arbitrary code string inside the page context using eval to allow statements
+    const result = await page.evaluate((code: string) => {
+      try {
+        // eslint-disable-next-line no-eval
+        return eval(code);
+      } catch (e) {
+        // Re-throw to be handled in Node context
+        throw e instanceof Error ? e.message : String(e);
+      }
+    }, script);
+
     // If the page returned a special shape requesting to register a selector
     if (result && typeof result === "object" && (result.__registerSelector || result.__register)) {
       const sel = result.__registerSelector || result.__register;
@@ -129,15 +145,12 @@ export async function evaluate(pageRef: string, script: string): Promise<any> {
     }
     return result;
   } catch (err) {
-    // Re-throw with more context
-    throw new Error(`evaluate failed: ${(err as Error).message}`);
+    // Normalize error to include message
+    const message = err && typeof err === 'object' && 'message' in err ? (err as any).message : String(err);
+    throw new Error(`evaluate failed: ${message}`);
   }
 }
 
-/**
- * Fill an input on the page. Accepts either an element token (eN) or a selector string.
- * If a selector string is provided, you must also supply the pageTokenHint returned by newPage().
- */
 export async function fill(refOrToken: string, text: string, pageTokenHint?: string) {
   ensureFlag();
   if (!text || typeof text !== "string") throw new Error("fill: text must be a string");
@@ -151,10 +164,6 @@ export async function fill(refOrToken: string, text: string, pageTokenHint?: str
   }
 }
 
-/**
- * Upload a file to an <input type="file"> element. Accepts element token or selector.
- * If selector string is provided, pageTokenHint must be given.
- */
 export async function upload(refOrToken: string, filePath: string, pageTokenHint?: string) {
   ensureFlag();
   if (!filePath || typeof filePath !== "string") throw new Error("upload: filePath must be a string");
@@ -271,6 +280,84 @@ export async function downloadByRef(refToken: string, destPath: string, pageToke
   }
 }
 
+/** Adapter convenience helpers for auth-bootstrap script */
+export async function open(url?: string) {
+  ensureFlag();
+  if (!context) await launchPersistent();
+  if (!mainPageToken) {
+    const pg = await context!.newPage();
+    pageCounter += 1;
+    mainPageToken = `p${pageCounter}`;
+    pages.set(mainPageToken, pg);
+  }
+  const page = resolvePage(mainPageToken);
+  if (url) await page.goto(url, { waitUntil: 'domcontentloaded' }).catch(() => undefined);
+  return mainPageToken;
+}
+
+export async function getUrl() {
+  ensureFlag();
+  if (!mainPageToken) throw new Error('No page available');
+  const page = resolvePage(mainPageToken);
+  return page.url();
+}
+
+export async function pageText() {
+  ensureFlag();
+  if (!mainPageToken) throw new Error('No page available');
+  const page = resolvePage(mainPageToken);
+  try {
+    return await page.evaluate(() => document.body ? document.body.innerText : document.documentElement?.innerText || '');
+  } catch (err) {
+    return '';
+  }
+}
+
+export async function cookiesClear() {
+  ensureFlag();
+  if (!context) await launchPersistent();
+  try {
+    await context!.clearCookies();
+  } catch (err) {
+    throw new Error(`cookiesClear failed: ${(err as Error).message}`);
+  }
+}
+
+export async function cookiesSet(cookies: Array<any>) {
+  ensureFlag();
+  if (!context) await launchPersistent();
+  try {
+    // Playwright expects expires in seconds since epoch (optional)
+    const converted = cookies.map((c) => {
+      const out: any = {
+        name: c.name,
+        value: c.value,
+        domain: c.domain,
+        path: c.path || '/',
+        httpOnly: Boolean(c.httpOnly),
+        secure: Boolean(c.secure),
+      };
+      if (typeof c.expires === 'number') out.expires = Math.round(c.expires);
+      if (c.sameSite) out.sameSite = c.sameSite as any;
+      return out;
+    });
+    await context!.addCookies(converted);
+  } catch (err) {
+    throw new Error(`cookiesSet failed: ${(err as Error).message}`);
+  }
+}
+
+export async function screenshot(destPath: string) {
+  ensureFlag();
+  if (!mainPageToken) throw new Error('No page available for screenshot');
+  const page = resolvePage(mainPageToken);
+  try {
+    await page.screenshot({ path: destPath, fullPage: true });
+  } catch (err) {
+    throw new Error(`screenshot failed: ${(err as Error).message}`);
+  }
+}
+
 export default {
   launchPersistent,
   newPage,
@@ -281,4 +368,10 @@ export default {
   registerElement,
   snapshotText,
   downloadByRef,
+  open,
+  getUrl,
+  pageText,
+  cookiesClear,
+  cookiesSet,
+  screenshot,
 };

@@ -23,15 +23,15 @@ Exported functions (all return Promises)
 - Purpose: Gracefully close browser and free resources.
 - Returns: void
 
-3) open(url: string): Promise<PageRef>
+3) newPage(url?: string): Promise<PageRef>
 - Purpose: Open a new page/tab and navigate to url.
-- Returns: a PageRef object representing the page handle (opaque token used by other operations)
-- PageRef format: { id: string } (string token stable for the adapter lifetime)
+- Returns: a PageRef token representing the page handle (opaque token used by other operations)
+- PageRef format: string token (p1, p2...) stable for the adapter lifetime
 
-4) eval(pageRef: PageRef | string, script: string): Promise<EvalResult>
+4) evaluate(pageRef: PageRef | string, script: string): Promise<any>
 - Purpose: Run arbitrary JS code in the context of the page and return a serializable result.
-- script: string of JS to evaluate. For convenience you can use `return` in the script to return a value.
-- Returns: { success: boolean, value?: any, error?: string }
+- script: string of JS to evaluate. Can be an expression (e.g. `({ok:true})`) or statements (e.g. `document.title = 'x'; return document.title;`).
+- Returns: the serializable result of the evaluation. If the page returns `{ __registerSelector: "#foo" }`, the adapter will register that selector and return an element token (e1...).
 
 5) snapshotText(pageToken: string): Promise<string>
 - Purpose: Capture a textual snapshot of the page for oracle processing.
@@ -59,20 +59,20 @@ Examples (JS)
 import * as adapter from './adapter/playwright-adapter'
 
 await adapter.launch({ headless: true })
-const page = await adapter.open('https://example.com')
-const snap = await adapter.snapshot({ pageRef: page, full: false })
-// snapshots include tokens like <<ref:btn-1>>
-console.log(snap.text)
+const page = await adapter.newPage('https://example.com')
+const snap = await adapter.snapshotText(page)
+// snapshots include tokens like e1
+console.log(snap)
 
 // Evaluate script
-const res = await adapter.evaluate(page, `return document.title`) 
-console.log(res.value)
+const res = await adapter.evaluate(page, `return document.title`)
+console.log(res)
 
 // Cleanup
 await adapter.close()
 
 Notes
-- Snapshot token naming: adapter should expose token IDs without the surrounding `<<ref:...>>` when used as inputs to click/fill. For clarity callers may pass the raw token string or the quoted token (both should be accepted by the stub).
+- Snapshot token naming: adapter should expose token IDs without surrounding characters when used as inputs to click/fill. Callers may pass the raw token string or the quoted token (both should be accepted by the stub).
 - All functions are asynchronous and should reject with meaningful errors when operations fail.
 
 Acceptance criteria
@@ -80,5 +80,3 @@ Acceptance criteria
 - adapter/playwright-adapter.ts exported function signatures with JSDoc and types
 - adapter/README.md with short usage and feature flag note
 - scripts/feature-flags.md describing USE_PLAYWRIGHT
-
-

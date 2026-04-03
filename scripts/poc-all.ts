@@ -54,20 +54,35 @@ async function main() {
   const snap = await adapter.snapshotText(p2);
   console.log('Snapshot:\n', snap);
 
-  // pick first ref token like e1
-  const m = snap.match(/ref=(e\d+)/);
-  if (m) {
-    const token = m[1];
+  // choose a download-capable ref: prefer anchors with data:, or link/button labels
+  const lines = snap.split('\n').map(l => l.trim()).filter(Boolean);
+  let token: string | null = null;
+  for (const line of lines) {
+    const m = line.match(/ref=(e\d+)/);
+    if (!m) continue;
+    const t = m[1];
+    // heuristics: data: href, anchor, download label, or dynamic
+    if (/data:\w+:/.test(line) || /\ba\b/i.test(line) || /download/i.test(line) || /dynamic/i.test(line)) {
+      token = t;
+      break;
+    }
+  }
+
+  if (token) {
     const dest = path.join(os.tmpdir(), `poc-down-${Date.now()}.bin`);
     console.log('Downloading ref', token, 'to', dest);
-    await adapter.downloadByRef(token, dest, p2);
-    console.log('Downloaded. sha256=', await sha256(dest));
+    try {
+      await adapter.downloadByRef(token, dest, p2);
+      console.log('Downloaded. sha256=', await sha256(dest));
+    } catch (err) {
+      console.error('Download failed:', err);
+    }
   } else {
-    console.log('No ref found to download from snapshot');
+    console.log('No suitable ref found to download from snapshot');
   }
 
   await adapter.close();
   console.log('POC All: done');
 }
 
-main().catch((e)=>{ console.error(e); process.exit(1); });
+main().catch((e) => { console.error(e); process.exit(1); });
