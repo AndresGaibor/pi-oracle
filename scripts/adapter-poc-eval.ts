@@ -13,7 +13,7 @@ async function main() {
 
   // open about:blank and run a simple eval that returns JSON
   const p1 = await adapter.newPage("about:blank");
-  const result = await adapter.eval(p1, `({ ok: true, timestamp: Date.now() })`);
+  const result = await adapter.evaluate(p1, `({ ok: true, timestamp: Date.now() })`);
   console.log("Eval result:", result);
 
   // create a tiny test page with a text input and file input via data URL
@@ -49,7 +49,7 @@ async function main() {
   console.log("Uploaded file to input on page", p2);
 
   // read filename from page
-  const uploadedName = await adapter.eval(p2, `() => ({ name: (window.__getFileName && window.__getFileName()) || null })`);
+  const uploadedName = await adapter.evaluate(p2, `() => ({ name: (window.__getFileName && window.__getFileName()) || null })`);
   console.log("Uploaded filename (from page):", uploadedName);
 
   await adapter.close();

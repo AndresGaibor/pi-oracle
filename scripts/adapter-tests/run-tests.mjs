@@ -26,7 +26,7 @@ async function run() {
 
   // eval test
   console.log('Running eval test...');
-  const evalRes = await adapter.eval('({hello: "world", sum: 1+2})');
+  const evalRes = await adapter.evaluate('({hello: "world", sum: 1+2})');
   if (!evalRes.success) throw new Error('eval failed: ' + evalRes.error);
   if (evalRes.value.hello !== 'world' || evalRes.value.sum !== 3) throw new Error('eval returned unexpected value: ' + JSON.stringify(evalRes.value));
   console.log('eval test passed');
@@ -35,7 +35,7 @@ async function run() {
   console.log('Running fill test...');
   const fillRes = await adapter.fill('#name', 'Alice');
   if (!fillRes.success) throw new Error('fill failed: ' + fillRes.error);
-  const nameRes = await adapter.eval('document.querySelector("#name").value');
+  const nameRes = await adapter.evaluate('document.querySelector("#name").value');
   if (!nameRes.success) throw new Error('eval after fill failed: ' + nameRes.error);
   if (nameRes.value !== 'Alice') throw new Error('fill did not set value, got: ' + nameRes.value);
   console.log('fill test passed');
@@ -45,7 +45,7 @@ async function run() {
   const fixture = path.resolve(__dirname, 'fixtures', 'testfile.txt');
   const uploadRes = await adapter.upload('#file', fixture);
   if (!uploadRes.success) throw new Error('upload failed: ' + uploadRes.error);
-  const fileNameRes = await adapter.eval('document.querySelector("#file").files[0] && document.querySelector("#file").files[0].name');
+  const fileNameRes = await adapter.evaluate('document.querySelector("#file").files[0] && document.querySelector("#file").files[0].name');
   if (!fileNameRes.success) throw new Error('eval after upload failed: ' + fileNameRes.error);
   const expectedName = path.basename(fixture);
   if (fileNameRes.value !== expectedName) throw new Error('upload did not attach file, got: ' + String(fileNameRes.value));

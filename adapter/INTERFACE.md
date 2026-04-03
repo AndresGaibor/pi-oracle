@@ -64,11 +64,8 @@ const snap = await adapter.snapshot({ pageRef: page, full: false })
 // snapshots include tokens like <<ref:btn-1>>
 console.log(snap.text)
 
-// Click a token from snapshot
-await adapter.click('btn-1')
-
 // Evaluate script
-const res = await adapter.eval(page, `return document.title`) 
+const res = await adapter.evaluate(page, `return document.title`) 
 console.log(res.value)
 
 // Cleanup

@@ -5,6 +5,8 @@
 // in the terminal before closing the browser.
 
 // Ensure we run the adapter path resolving with TS support in Bun.
+ 
+
 process.env.USE_PLAYWRIGHT = process.env.USE_PLAYWRIGHT || '1';
 
 async function main() {
@@ -41,7 +43,7 @@ async function main() {
   </body>
 </html>`;
 
-    await adapter.eval(pageToken, `document.write(${JSON.stringify(html)});`);
+    await adapter.evaluate(pageToken, `document.write(${JSON.stringify(html)});`);
 
     console.log('Page opened in headful mode. Interact with the browser window.');
     console.log('Press ENTER in this terminal to close the browser and exit.');

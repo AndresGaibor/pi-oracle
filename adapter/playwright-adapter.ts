@@ -113,7 +113,7 @@ function resolveRef(refOrToken: string, pageTokenHint?: string) {
  * If the evaluated result is an object {__registerSelector: "..."} the adapter will
  * register that selector and return an element token string.
  */
-export async function eval(pageRef: string, script: string): Promise<any> {
+export async function evaluate(pageRef: string, script: string): Promise<any> {
   ensureFlag();
   const page = resolvePage(pageRef);
   // run the script in the page context by wrapping in a function that returns the expression
@@ -130,7 +130,7 @@ export async function eval(pageRef: string, script: string): Promise<any> {
     return result;
   } catch (err) {
     // Re-throw with more context
-    throw new Error(`eval failed: ${(err as Error).message}`);
+    throw new Error(`evaluate failed: ${(err as Error).message}`);
   }
 }
 
@@ -275,7 +275,7 @@ export default {
   launchPersistent,
   newPage,
   close,
-  eval,
+  evaluate,
   fill,
   upload,
   registerElement,
