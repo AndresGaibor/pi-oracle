@@ -1,6 +1,7 @@
 // scripts/setup-brave-profile.ts - Create dedicated Brave profile for Oracle
 import { mkdir, writeFile } from "node:fs/promises";
-import { homedir, join } from "node:path";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 const PROFILE_DIR = join(
 	homedir(),

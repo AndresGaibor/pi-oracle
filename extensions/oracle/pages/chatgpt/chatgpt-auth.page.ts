@@ -1,6 +1,8 @@
 // pages/chatgpt/chatgpt-auth.page.ts - ChatGPT Authentication Page Object
 import { BasePage } from "../base.page.js";
-import { CHATGPT, labelMatches } from "./chatgpt-selectors.js";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyCookie = any;
 
 export class ChatGPTAuthPage extends BasePage {
 	// ---- Session Probe ----
@@ -39,22 +41,32 @@ export class ChatGPTAuthPage extends BasePage {
 		const profile =
 			braveProfileDir ||
 			`${process.env.HOME}/Library/Application Support/BraveSoftware/Brave-Browser/Default`;
-		const cookieDb = `${profile}/Cookies`;
 
 		// 1. Read cookies
 		console.log("  Reading cookies from Brave...");
 
 		try {
 			// Dynamic import to avoid issues when not in browser context
-			const { readChromeCookies } = await import("@steipete/sweet-cookie");
-			const rawCookies = await readChromeCookies(cookieDb);
+			const { getCookies } = await import("@steipete/sweet-cookie");
+			const result = await getCookies({
+				url: "https://chatgpt.com",
+				origins: ["https://chatgpt.com", "https://auth.openai.com"],
+				browsers: ["chrome"],
+				mode: "merge",
+				chromeProfile: profile,
+				timeoutMs: 5_000,
+			} as Parameters<typeof getCookies>[0]);
+			const rawCookies = result.cookies as AnyCookie[];
 			console.log(`  ${rawCookies.length} total cookies`);
 
 			// 2. Normalize and filter
 			const { normalizeImportedCookie, filterImportableAuthCookies } =
 				await import("../../worker/auth-cookie-policy.js");
-			const normalized = rawCookies.map(normalizeImportedCookie);
-			const filtered = filterImportableAuthCookies(normalized);
+			const filteredResult = filterImportableAuthCookies(
+				rawCookies as Parameters<typeof normalizeImportedCookie>[],
+				"https://chatgpt.com",
+			);
+			const filtered = filteredResult.cookies;
 			console.log(`  ${filtered.length} auth cookies`);
 
 			if (filtered.length === 0) {
