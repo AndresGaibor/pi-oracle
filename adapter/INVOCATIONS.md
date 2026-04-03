@@ -63,7 +63,7 @@ Nota: la mayoría de invocaciones usan un prefijo común `--session <session>` g
 
 Se listan las ubicaciones encontradas en el repo (archivo:linea). Estas referencias provienen del código fuente actual en `extensions/oracle/worker/*` y `extensions/oracle/lib`.
 
-- extensions/oracle/worker/auth-bootstrap.mjs
+- extensions/oracle/worker/run-auth-bootstrap.sh
   - 176: spawnCommand("agent-browser", [...targetBrowserBaseArgs(), "close"], { allowFailure: true });
     - Corresponde a: agent-browser --session <AUTH_SESSION> close
   - 248: spawnCommand("agent-browser", args, { allowFailure: true });
@@ -72,8 +72,6 @@ Se listan las ubicaciones encontradas en el repo (archivo:linea). Estas referenc
     - Corresponde a: agent-browser --session <AUTH_SESSION> --json stream status
   - 285: spawnCommand("agent-browser", [...targetBrowserBaseArgs(), ...args], options);
     - Punto central donde se delegan múltiples comandos (eval, open, get, snapshot, click, cookies, screenshot, reload, etc.) desde el helper targetCommand
-
-- invocaciones a helper `targetCommand` (construye y ejecuta agent-browser) — `extensions/oracle/worker/auth-bootstrap.mjs`
   - 273: definición async function targetCommand(...args) { ... }
   - 304: targetCommand("eval", "--stdin", { input: script, logLabel });
     - agent-browser --session <AUTH_SESSION> eval --stdin  (stdin contiene script)
