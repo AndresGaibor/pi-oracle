@@ -59,8 +59,14 @@ check("Cookies ChatGPT legibles", async () => {
 	try {
 		const { getCookies } = await import("@steipete/sweet-cookie");
 		const { cookies } = await getCookies({
-			url: "https://chatgpt.com",
-			origins: ["https://chatgpt.com", "https://chat.openai.com"],
+			origins: [
+				"https://chatgpt.com",
+				"https://chat.openai.com",
+				"https://atlas.openai.com",
+				"https://auth.openai.com",
+				"https://sentinel.openai.com",
+				"https://ws.chatgpt.com",
+			],
 			browsers: ["chrome"],
 			mode: "merge",
 			chromeProfile: join(
@@ -68,10 +74,10 @@ check("Cookies ChatGPT legibles", async () => {
 				"Library/Application Support/BraveSoftware/Brave-Browser/Default",
 			),
 		});
+		// Usar .domain en lugar de .host_key (estructura correcta de sweet-cookie)
 		const chatgptCookies = cookies.filter(
 			(c: any) =>
-				c.host_key?.includes("chatgpt.com") ||
-				c.host_key?.includes("openai.com"),
+				c.domain?.includes("chatgpt.com") || c.domain?.includes("openai.com"),
 		);
 		const hasSession = chatgptCookies.some((c: any) =>
 			c.name.includes("session-token"),
@@ -79,7 +85,7 @@ check("Cookies ChatGPT legibles", async () => {
 		console.log(
 			`     -> ${cookies.length} cookies total, ${chatgptCookies.length} ChatGPT, session: ${hasSession ? "SI" : "NO"}`,
 		);
-		return chatgptCookies.length > 0;
+		return chatgptCookies.length > 0 && hasSession;
 	} catch (e) {
 		console.log(`     -> ERROR: ${e}`);
 		return false;

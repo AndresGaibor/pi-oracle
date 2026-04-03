@@ -10,15 +10,6 @@ const BRAVE_PROFILE = join(
 	"Library/Application Support/BraveSoftware/Brave-Browser/Default",
 );
 
-const CHATGPT_COOKIE_ORIGINS = [
-	"https://chatgpt.com",
-	"https://chat.openai.com",
-	"https://atlas.openai.com",
-	"https://auth.openai.com",
-	"https://sentinel.openai.com",
-	"https://ws.chatgpt.com",
-];
-
 console.log("=== Verificando Cookies de Brave ===\n");
 console.log("Perfil Brave:", BRAVE_PROFILE);
 console.log(
@@ -27,49 +18,85 @@ console.log(
 
 try {
 	const { cookies, warnings } = await getCookies({
-		url: "https://chatgpt.com",
-		origins: CHATGPT_COOKIE_ORIGINS,
-		browsers: ["chrome"], // sweet-cookie trata a Brave como Chrome
+		origins: [
+			"https://chatgpt.com",
+			"https://chat.openai.com",
+			"https://atlas.openai.com",
+			"https://auth.openai.com",
+			"https://sentinel.openai.com",
+			"https://ws.chatgpt.com",
+		],
+		browsers: ["chrome"],
 		mode: "merge",
 		chromeProfile: BRAVE_PROFILE,
 	});
 
-	console.log(`Total cookies: ${cookies.length}`);
+	console.log(`Total cookies: ${cookies.length}\n`);
 
-	const chatgptCookies = cookies.filter(
-		(c: any) =>
-			c.host_key?.includes("chatgpt.com") || c.host_key?.includes("openai.com"),
-	);
-
-	console.log(`Cookies de ChatGPT/OpenAI: ${chatgptCookies.length}`);
-	console.log("\nNombres de cookies ChatGPT:");
-	chatgptCookies.forEach((c: any) => {
-		console.log(`  - ${c.name} (dominio: ${c.host_key})`);
+	// Filtrar cookies de ChatGPT/OpenAI (usar .domain no .host_key)
+	const chatgptCookies = cookies.filter((c: any) => {
+		const domain = c.domain || c.host_key || "";
+		return domain.includes("chatgpt.com") || domain.includes("openai.com");
 	});
 
-	const sessionCookie = chatgptCookies.find(
-		(c: any) => c.name === "__Secure-next-auth.session-token",
+	console.log(`Cookies de ChatGPT/OpenAI: ${chatgptCookies.length}`);
+
+	// Buscar TODOS los session tokens (ahora son .0 y .1)
+	const sessionCookies = chatgptCookies.filter((c: any) =>
+		c.name.startsWith("__Secure-next-auth.session-token"),
 	);
 
-	console.log("\n🔑 Session token:");
-	if (sessionCookie) {
-		console.log("   ✅ ENCONTRADO");
-		const expires = new Date((sessionCookie.expires_utc || 0) * 1000);
-		console.log("   Expira:", expires.toISOString());
-		const now = new Date();
-		if (expires < now) {
-			console.log("   ⚠️  WARNING: Cookie expirado!");
-		} else {
-			console.log("   ✅ Cookie válido");
-		}
+	console.log("\n🔑 Session tokens encontrados:");
+	if (sessionCookies.length > 0) {
+		sessionCookies.forEach((sc: any) => {
+			console.log(`\n  Nombre: ${sc.name}`);
+			console.log(`  Dominio: ${sc.domain}`);
+			console.log(`  Value (primeros 50 chars): ${sc.value?.slice(0, 50)}...`);
+
+			// El campo 'expires' es Unix timestamp (segundos), no microsegundos
+			const expiresUnix = sc.expires;
+			if (expiresUnix) {
+				const expiresDate = new Date(expiresUnix * 1000);
+				console.log(`  Expira (Unix): ${expiresUnix}`);
+				console.log(`  Expira (fecha): ${expiresDate.toISOString()}`);
+
+				const now = Date.now() / 1000;
+				if (expiresUnix < now) {
+					console.log(`  ⚠️  EXPIRADO!`);
+				} else {
+					const daysLeft = Math.floor((expiresUnix - now) / 86400);
+					console.log(`  ✅ Válido (${daysLeft} días restantes)`);
+				}
+			} else {
+				console.log(`  ⚠️  Sin fecha de expiración (sesión de navegador?)`);
+			}
+		});
 	} else {
 		console.log("   ❌ NO ENCONTRADO");
 		console.log("   → Asegúrate de haber iniciado sesión en ChatGPT en Brave");
 	}
 
+	// Verificar otras cookies importantes
+	console.log("\n📋 Otras cookies importantes:");
+	const importantCookies = [
+		"oai-did",
+		"oai-sc",
+		"cf_clearance",
+		"oai-client-auth-info",
+		"_puid",
+	];
+	importantCookies.forEach((name) => {
+		const found = chatgptCookies.find((c: any) => c.name === name);
+		if (found) {
+			console.log(`  ✅ ${name}: ${found.domain}`);
+		} else {
+			console.log(`  ❌ ${name}: NO ENCONTRADA`);
+		}
+	});
+
 	if (warnings.length > 0) {
 		console.log("\n⚠️  Warnings de sweet-cookie:");
-		warnings.forEach((w) => console.log(`   - ${w}`));
+		warnings.forEach((w: string) => console.log(`   - ${w}`));
 	}
 } catch (e: any) {
 	console.error("\n❌ Error leyendo cookies:", e.message);
