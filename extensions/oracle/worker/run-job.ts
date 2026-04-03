@@ -759,7 +759,7 @@ async function openEffortDropdown(job: any) {
   const effortLabels = new Set(allEffortLabels());
   const entry = findEntry(
     snapshot,
-    (candidate: SnapshotEntry) => candidate.kind === "combobox" && candidate.value && effortLabels.has(candidate.value) && !candidate.disabled,
+    (candidate: SnapshotEntry) => !!(candidate.kind === "combobox" && candidate.value && effortLabels.has(candidate.value) && !candidate.disabled),
   );
   if (!entry) return false;
   await clickRef(job, entry.ref);
