@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "files": {
+    "extensions/oracle/lib/config.ts": {
+      "latest": {
+        "commit": "f8f4f7c",
+        "timestamp": "2026-04-03T18:55:48.366Z",
+        "mi": 18.4,
+        "cognitive": 116,
+        "nesting": 3,
+        "lines": 319,
+        "maxCyclomatic": 24,
+        "entropy": 6.4
+      },
+      "history": [
+        {
+          "commit": "f8f4f7c",
+          "timestamp": "2026-04-03T18:55:48.366Z",
+          "mi": 18.4,
+          "cognitive": 116,
+          "nesting": 3,
+          "lines": 319,
+          "maxCyclomatic": 24,
+          "entropy": 6.4
+        }
+      ],
+      "trend": "stable"
+    }
+  },
+  "capturedAt": "2026-04-03T18:55:53.368Z"
+}
