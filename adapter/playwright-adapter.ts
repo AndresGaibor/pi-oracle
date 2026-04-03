@@ -32,6 +32,8 @@ async function lazyImport() {
 export async function launchPersistent(
 	userDataDir?: string,
 	executablePath?: string,
+	args?: string[],
+	userAgent?: string,
 ) {
 	ensureFlag();
 	await lazyImport();
@@ -49,6 +51,8 @@ export async function launchPersistent(
 		headless,
 		acceptDownloads: true,
 		executablePath: browserExe,
+		args,
+		userAgent,
 	});
 
 	// create a main page so callers can use simple open/getUrl APIs

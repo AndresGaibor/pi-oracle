@@ -3,14 +3,14 @@
   "files": {
     "extensions/oracle/lib/config.ts": {
       "latest": {
-        "commit": "f8f4f7c",
-        "timestamp": "2026-04-03T18:55:48.366Z",
-        "mi": 18.4,
-        "cognitive": 116,
+        "commit": "5d9c421",
+        "timestamp": "2026-04-03T19:58:31.131Z",
+        "mi": 16.7,
+        "cognitive": 137,
         "nesting": 3,
-        "lines": 319,
+        "lines": 361,
         "maxCyclomatic": 24,
-        "entropy": 6.4
+        "entropy": 6.55
       },
       "history": [
         {
@@ -22,9 +22,19 @@
           "lines": 319,
           "maxCyclomatic": 24,
           "entropy": 6.4
+        },
+        {
+          "commit": "5d9c421",
+          "timestamp": "2026-04-03T19:58:31.131Z",
+          "mi": 16.7,
+          "cognitive": 137,
+          "nesting": 3,
+          "lines": 361,
+          "maxCyclomatic": 24,
+          "entropy": 6.55
         }
       ],
-      "trend": "stable"
+      "trend": "regressing"
     },
     "scripts/debug-cookies-simple.ts": {
       "latest": {
@@ -125,7 +135,32 @@
         }
       ],
       "trend": "stable"
+    },
+    "extensions/oracle/index.ts": {
+      "latest": {
+        "commit": "5d9c421",
+        "timestamp": "2026-04-03T19:55:58.076Z",
+        "mi": 42.4,
+        "cognitive": 18,
+        "nesting": 5,
+        "lines": 48,
+        "maxCyclomatic": 3,
+        "entropy": 5.48
+      },
+      "history": [
+        {
+          "commit": "5d9c421",
+          "timestamp": "2026-04-03T19:55:58.076Z",
+          "mi": 42.4,
+          "cognitive": 18,
+          "nesting": 5,
+          "lines": 48,
+          "maxCyclomatic": 3,
+          "entropy": 5.48
+        }
+      ],
+      "trend": "stable"
     }
   },
-  "capturedAt": "2026-04-03T19:10:03.153Z"
+  "capturedAt": "2026-04-03T19:58:36.132Z"
 }

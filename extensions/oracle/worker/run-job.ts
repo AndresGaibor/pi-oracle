@@ -355,7 +355,12 @@ async function launchBrowser(job: any, url: string) {
   await closeBrowser(job);
   const mode = job.config.browser.runMode;
   if (process.env.USE_PLAYWRIGHT === "1") {
-    await adapter.launchPersistent(job.runtimeProfileDir);
+    await adapter.launchPersistent(
+      job.runtimeProfileDir,
+      job.config.browser.executablePath,
+      job.config.browser.args,
+      job.config.browser.userAgent,
+    );
     pageToken = await adapter.open(url);
     browserStarted = true;
   } else {

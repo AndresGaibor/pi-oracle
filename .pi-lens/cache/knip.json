@@ -13,6 +13,11 @@
     },
     {
       "type": "file",
+      "name": "stubs/pi-coding-agent.ts",
+      "file": "stubs/pi-coding-agent.ts"
+    },
+    {
+      "type": "file",
       "name": "scripts/adapter-poc-eval.ts",
       "file": "scripts/adapter-poc-eval.ts"
     },
@@ -23,8 +28,43 @@
     },
     {
       "type": "file",
+      "name": "scripts/debug-all-cookies.ts",
+      "file": "scripts/debug-all-cookies.ts"
+    },
+    {
+      "type": "file",
+      "name": "scripts/debug-brave-adapter-simple.ts",
+      "file": "scripts/debug-brave-adapter-simple.ts"
+    },
+    {
+      "type": "file",
+      "name": "scripts/debug-cookie-inject-simple.ts",
+      "file": "scripts/debug-cookie-inject-simple.ts"
+    },
+    {
+      "type": "file",
+      "name": "scripts/debug-cookies-simple.ts",
+      "file": "scripts/debug-cookies-simple.ts"
+    },
+    {
+      "type": "file",
+      "name": "scripts/debug-detection-baseline.ts",
+      "file": "scripts/debug-detection-baseline.ts"
+    },
+    {
+      "type": "file",
       "name": "scripts/debug-headful.ts",
       "file": "scripts/debug-headful.ts"
+    },
+    {
+      "type": "file",
+      "name": "scripts/debug-oracle-prompt.ts",
+      "file": "scripts/debug-oracle-prompt.ts"
+    },
+    {
+      "type": "file",
+      "name": "scripts/health-check.ts",
+      "file": "scripts/health-check.ts"
     },
     {
       "type": "file",
@@ -35,6 +75,11 @@
       "type": "file",
       "name": "scripts/simulate-worker.ts",
       "file": "scripts/simulate-worker.ts"
+    },
+    {
+      "type": "file",
+      "name": "scripts/verify-bun.ts",
+      "file": "scripts/verify-bun.ts"
     },
     {
       "type": "file",
@@ -77,43 +122,7 @@
       "type": "unlisted",
       "name": "@mariozechner/pi-coding-agent",
       "file": "extensions/oracle/lib/commands.ts",
-      "line": 4
-    },
-    {
-      "type": "export",
-      "name": "getPollerSessionKey",
-      "file": "extensions/oracle/lib/poller.ts",
-      "line": 20
-    },
-    {
-      "type": "unlisted",
-      "name": "@mariozechner/pi-coding-agent",
-      "file": "extensions/oracle/lib/poller.ts",
-      "line": 1
-    },
-    {
-      "type": "unlisted",
-      "name": "@mariozechner/pi-ai",
-      "file": "extensions/oracle/lib/tools.ts",
-      "line": 5
-    },
-    {
-      "type": "unlisted",
-      "name": "@mariozechner/pi-coding-agent",
-      "file": "extensions/oracle/lib/tools.ts",
-      "line": 6
-    },
-    {
-      "type": "unlisted",
-      "name": "@sinclair/typebox",
-      "file": "extensions/oracle/lib/tools.ts",
-      "line": 7
-    },
-    {
-      "type": "unlisted",
-      "name": "@mariozechner/pi-coding-agent",
-      "file": "extensions/oracle/index.ts",
-      "line": 3
+      "line": 2
     },
     {
       "type": "export",
@@ -143,19 +152,25 @@
       "type": "export",
       "name": "isWorkerProcessAlive",
       "file": "extensions/oracle/lib/jobs.ts",
-      "line": 56
+      "line": 58
     },
     {
       "type": "export",
       "name": "writeJob",
       "file": "extensions/oracle/lib/jobs.ts",
-      "line": 190
+      "line": 194
     },
     {
       "type": "export",
       "name": "terminateWorkerPid",
       "file": "extensions/oracle/lib/jobs.ts",
-      "line": 232
+      "line": 236
+    },
+    {
+      "type": "export",
+      "name": "cleanupJobResources",
+      "file": "extensions/oracle/lib/jobs.ts",
+      "line": 308
     },
     {
       "type": "export",
@@ -173,25 +188,25 @@
       "type": "export",
       "name": "OracleArtifactRecord",
       "file": "extensions/oracle/lib/jobs.ts",
-      "line": 62
+      "line": 64
     },
     {
       "type": "export",
       "name": "OracleJob",
       "file": "extensions/oracle/lib/jobs.ts",
-      "line": 78
+      "line": 80
     },
     {
       "type": "export",
       "name": "OracleSubmitInput",
       "file": "extensions/oracle/lib/jobs.ts",
-      "line": 124
+      "line": 128
     },
     {
       "type": "export",
       "name": "OracleRuntimeAllocation",
       "file": "extensions/oracle/lib/jobs.ts",
-      "line": 135
+      "line": 139
     },
     {
       "type": "unlisted",
@@ -201,15 +216,39 @@
     },
     {
       "type": "export",
-      "name": "normalizeImportedCookie",
-      "file": "extensions/oracle/worker/auth-cookie-policy.mjs",
-      "line": 80
+      "name": "getPollerSessionKey",
+      "file": "extensions/oracle/lib/poller.ts",
+      "line": 20
     },
     {
-      "type": "export",
-      "name": "classifyImportedCookie",
-      "file": "extensions/oracle/worker/auth-cookie-policy.mjs",
-      "line": 96
+      "type": "unlisted",
+      "name": "@mariozechner/pi-coding-agent",
+      "file": "extensions/oracle/lib/poller.ts",
+      "line": 1
+    },
+    {
+      "type": "unlisted",
+      "name": "@mariozechner/pi-coding-agent",
+      "file": "extensions/oracle/lib/tools.ts",
+      "line": 6
+    },
+    {
+      "type": "unlisted",
+      "name": "@mariozechner/pi-ai",
+      "file": "extensions/oracle/lib/tools.ts",
+      "line": 5
+    },
+    {
+      "type": "unlisted",
+      "name": "@sinclair/typebox",
+      "file": "extensions/oracle/lib/tools.ts",
+      "line": 7
+    },
+    {
+      "type": "unlisted",
+      "name": "@mariozechner/pi-coding-agent",
+      "file": "extensions/oracle/index.ts",
+      "line": 3
     },
     {
       "type": "export",
@@ -249,6 +288,18 @@
     },
     {
       "type": "export",
+      "name": "normalizeImportedCookie",
+      "file": "extensions/oracle/worker/auth-cookie-policy.mjs",
+      "line": 80
+    },
+    {
+      "type": "export",
+      "name": "classifyImportedCookie",
+      "file": "extensions/oracle/worker/auth-cookie-policy.mjs",
+      "line": 96
+    },
+    {
+      "type": "export",
       "name": "authSessionName",
       "file": "extensions/oracle/lib/runtime.ts",
       "line": 61
@@ -275,7 +326,7 @@
       "type": "export",
       "name": "stableProjectLabel",
       "file": "extensions/oracle/lib/runtime.ts",
-      "line": 195
+      "line": 249
     },
     {
       "type": "export",
@@ -293,12 +344,6 @@
   "unusedExports": [
     {
       "type": "export",
-      "name": "getPollerSessionKey",
-      "file": "extensions/oracle/lib/poller.ts",
-      "line": 20
-    },
-    {
-      "type": "export",
       "name": "ACTIVE_ORACLE_JOB_STATUSES",
       "file": "extensions/oracle/lib/jobs.ts",
       "line": 27
@@ -325,19 +370,25 @@
       "type": "export",
       "name": "isWorkerProcessAlive",
       "file": "extensions/oracle/lib/jobs.ts",
-      "line": 56
+      "line": 58
     },
     {
       "type": "export",
       "name": "writeJob",
       "file": "extensions/oracle/lib/jobs.ts",
-      "line": 190
+      "line": 194
     },
     {
       "type": "export",
       "name": "terminateWorkerPid",
       "file": "extensions/oracle/lib/jobs.ts",
-      "line": 232
+      "line": 236
+    },
+    {
+      "type": "export",
+      "name": "cleanupJobResources",
+      "file": "extensions/oracle/lib/jobs.ts",
+      "line": 308
     },
     {
       "type": "export",
@@ -355,37 +406,31 @@
       "type": "export",
       "name": "OracleArtifactRecord",
       "file": "extensions/oracle/lib/jobs.ts",
-      "line": 62
+      "line": 64
     },
     {
       "type": "export",
       "name": "OracleJob",
       "file": "extensions/oracle/lib/jobs.ts",
-      "line": 78
+      "line": 80
     },
     {
       "type": "export",
       "name": "OracleSubmitInput",
       "file": "extensions/oracle/lib/jobs.ts",
-      "line": 124
+      "line": 128
     },
     {
       "type": "export",
       "name": "OracleRuntimeAllocation",
       "file": "extensions/oracle/lib/jobs.ts",
-      "line": 135
+      "line": 139
     },
     {
       "type": "export",
-      "name": "normalizeImportedCookie",
-      "file": "extensions/oracle/worker/auth-cookie-policy.mjs",
-      "line": 80
-    },
-    {
-      "type": "export",
-      "name": "classifyImportedCookie",
-      "file": "extensions/oracle/worker/auth-cookie-policy.mjs",
-      "line": 96
+      "name": "getPollerSessionKey",
+      "file": "extensions/oracle/lib/poller.ts",
+      "line": 20
     },
     {
       "type": "export",
@@ -425,6 +470,18 @@
     },
     {
       "type": "export",
+      "name": "normalizeImportedCookie",
+      "file": "extensions/oracle/worker/auth-cookie-policy.mjs",
+      "line": 80
+    },
+    {
+      "type": "export",
+      "name": "classifyImportedCookie",
+      "file": "extensions/oracle/worker/auth-cookie-policy.mjs",
+      "line": 96
+    },
+    {
+      "type": "export",
       "name": "authSessionName",
       "file": "extensions/oracle/lib/runtime.ts",
       "line": 61
@@ -451,7 +508,7 @@
       "type": "export",
       "name": "stableProjectLabel",
       "file": "extensions/oracle/lib/runtime.ts",
-      "line": 195
+      "line": 249
     },
     {
       "type": "export",
@@ -479,6 +536,11 @@
     },
     {
       "type": "file",
+      "name": "stubs/pi-coding-agent.ts",
+      "file": "stubs/pi-coding-agent.ts"
+    },
+    {
+      "type": "file",
       "name": "scripts/adapter-poc-eval.ts",
       "file": "scripts/adapter-poc-eval.ts"
     },
@@ -489,8 +551,43 @@
     },
     {
       "type": "file",
+      "name": "scripts/debug-all-cookies.ts",
+      "file": "scripts/debug-all-cookies.ts"
+    },
+    {
+      "type": "file",
+      "name": "scripts/debug-brave-adapter-simple.ts",
+      "file": "scripts/debug-brave-adapter-simple.ts"
+    },
+    {
+      "type": "file",
+      "name": "scripts/debug-cookie-inject-simple.ts",
+      "file": "scripts/debug-cookie-inject-simple.ts"
+    },
+    {
+      "type": "file",
+      "name": "scripts/debug-cookies-simple.ts",
+      "file": "scripts/debug-cookies-simple.ts"
+    },
+    {
+      "type": "file",
+      "name": "scripts/debug-detection-baseline.ts",
+      "file": "scripts/debug-detection-baseline.ts"
+    },
+    {
+      "type": "file",
       "name": "scripts/debug-headful.ts",
       "file": "scripts/debug-headful.ts"
+    },
+    {
+      "type": "file",
+      "name": "scripts/debug-oracle-prompt.ts",
+      "file": "scripts/debug-oracle-prompt.ts"
+    },
+    {
+      "type": "file",
+      "name": "scripts/health-check.ts",
+      "file": "scripts/health-check.ts"
     },
     {
       "type": "file",
@@ -501,6 +598,11 @@
       "type": "file",
       "name": "scripts/simulate-worker.ts",
       "file": "scripts/simulate-worker.ts"
+    },
+    {
+      "type": "file",
+      "name": "scripts/verify-bun.ts",
+      "file": "scripts/verify-bun.ts"
     },
     {
       "type": "file",
@@ -547,7 +649,13 @@
       "type": "unlisted",
       "name": "@mariozechner/pi-coding-agent",
       "file": "extensions/oracle/lib/commands.ts",
-      "line": 4
+      "line": 2
+    },
+    {
+      "type": "unlisted",
+      "name": "@mariozechner/pi-coding-agent",
+      "file": "extensions/oracle/lib/jobs.ts",
+      "line": 6
     },
     {
       "type": "unlisted",
@@ -557,15 +665,15 @@
     },
     {
       "type": "unlisted",
-      "name": "@mariozechner/pi-ai",
-      "file": "extensions/oracle/lib/tools.ts",
-      "line": 5
-    },
-    {
-      "type": "unlisted",
       "name": "@mariozechner/pi-coding-agent",
       "file": "extensions/oracle/lib/tools.ts",
       "line": 6
+    },
+    {
+      "type": "unlisted",
+      "name": "@mariozechner/pi-ai",
+      "file": "extensions/oracle/lib/tools.ts",
+      "line": 5
     },
     {
       "type": "unlisted",
@@ -578,13 +686,7 @@
       "name": "@mariozechner/pi-coding-agent",
       "file": "extensions/oracle/index.ts",
       "line": 3
-    },
-    {
-      "type": "unlisted",
-      "name": "@mariozechner/pi-coding-agent",
-      "file": "extensions/oracle/lib/jobs.ts",
-      "line": 6
     }
   ],
-  "summary": "Found 50 issues"
+  "summary": "Found 60 issues"
 }

@@ -257,7 +257,12 @@ async function launchTargetBrowser() {
   await closeTargetBrowser();
   if (process.env.USE_PLAYWRIGHT === "1") {
     await log(`Launching playwright persistent context with profile ${runtimeProfileDir}`);
-    await adapter.launchPersistent(runtimeProfileDir).catch((e) => {
+    await adapter.launchPersistent(
+      runtimeProfileDir,
+      config.browser.executablePath,
+      config.browser.args,
+      config.browser.userAgent,
+    ).catch((e) => {
       throw e;
     });
     await log("Playwright persistent context launched");

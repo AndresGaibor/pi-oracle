@@ -9,3 +9,4 @@ node_modules/
 adapter-tests/tmp-profile/
 *.tsbuildinfo
 dist/
+.ant-colony/
