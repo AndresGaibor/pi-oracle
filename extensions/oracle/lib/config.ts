@@ -455,7 +455,10 @@ function validateOracleConfig(value: unknown): OracleConfig {
 		defaults.autoSwitchToThinking,
 		"defaults.autoSwitchToThinking",
 	);
-	if (modelFamily === "pro" && !PRO_EFFORTS.includes(effort)) {
+	if (
+		modelFamily === "pro" &&
+		!(PRO_EFFORTS as readonly string[]).includes(effort)
+	) {
 		throw new Error(
 			`Invalid oracle config: defaults.effort must be one of ${PRO_EFFORTS.join(", ")} for pro`,
 		);

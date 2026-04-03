@@ -69,11 +69,20 @@ export default function oracleExtension(pi: ExtensionAPI) {
 		}
 	}
 
-	pi.on("session_start", async (event, ctx) => {
-		startPollerForContext(event.previousSessionFile, ctx);
-	});
+	pi.on(
+		"session_start",
+		async (
+			event: { previousSessionFile?: string },
+			ctx: ExtensionContext,
+		) => {
+			startPollerForContext(event.previousSessionFile, ctx);
+		},
+	);
 
-	pi.on("session_shutdown", async (_event, ctx) => {
-		stopPoller(ctx);
-	});
+	pi.on(
+		"session_shutdown",
+		async (_event: unknown, ctx: ExtensionContext) => {
+			stopPoller(ctx);
+		},
+	);
 }

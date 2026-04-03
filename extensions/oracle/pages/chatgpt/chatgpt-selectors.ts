@@ -31,14 +31,20 @@ export const CHATGPT = {
 			'nav a[aria-label*="New chat"]',
 			'nav a[aria-label*="Nuevo chat"]',
 		],
-		MODEL_SELECTOR: ['[data-testid="model-selector"]', 'button[id*="model"]'],
+		MODEL_SELECTOR: [
+			'[data-testid="model-selector"]',
+			'button[id*="model"]',
+		],
 		STOP_BUTTON: [
 			'[data-testid="stop-button"]',
 			'button[aria-label*="Stop"]',
 			'button[aria-label*="Detener"]',
 		],
-		RESPONSE_CONTAINER: ['[data-message-author-role="assistant"]', ".markdown"],
-		FILE_UPLOAD_INPUT: ['input[type="file"]'],
+		RESPONSE_CONTAINER: [
+			'[data-message-author-role="assistant"]',
+			".markdown",
+		],
+		FILE_UPLOAD_INPUT: ["input[type=\"file\"]"],
 	},
 
 	// Labels for snapshot matching (used by agent-browser and Playwright adapter)
@@ -53,11 +59,7 @@ export const CHATGPT = {
 			"Continuar",
 		],
 		MODEL: ["GPT-4o", "GPT-4", "GPT-3.5", "ChatGPT", "Model"],
-		TEXTAREA: [
-			"Message ChatGPT",
-			"Escribe un mensaje",
-			"Pregunta lo que quieras",
-		],
+		TEXTAREA: ["Message ChatGPT", "Escribe un mensaje", "Pregunta lo que quieras"],
 		LOGIN: ["Log in", "Sign up", "Iniciar sesion", "Registrate"],
 		UPGRADE: ["Upgrade", "Get Plus", "Mejorar"],
 	},
@@ -74,17 +76,14 @@ export const CHATGPT = {
 } as const;
 
 // Helper: check if a label matches
-export function labelMatches(
-	actual: string,
-	candidates: readonly string[],
-): boolean {
+export function labelMatches(actual: string, candidates: readonly string[]): boolean {
 	const normalized = actual.toLowerCase().trim();
 	return candidates.some((c) => normalized.includes(c.toLowerCase()));
 }
 
 // Helper: get the first selector that exists in the DOM
 export async function findWorkingSelector(
-	selectors: string[],
+	selectors: readonly string[],
 	jsEval: (code: string) => Promise<unknown>,
 ): Promise<string | null> {
 	return selectors.reduce(async (acc, sel) => {
