@@ -3,6 +3,7 @@
  * Each method performs a concrete action using the BrowserActions interface.
  */
 import type { BrowserActions } from "../browser-actions.types";
+import { parseSnapshotEntries, type ParsedSnapshotEntry } from "../../shared/snapshot-utils";
 import { CHATGPT_SELECTORS, CHATGPT_LABELS, labelMatches } from "./chatgpt.selectors";
 
 // ---------------------------------------------------------------------------
@@ -75,40 +76,13 @@ export async function clickClose(browser: BrowserActions): Promise<boolean> {
 // Utility: find labeled entry in snapshot
 // ---------------------------------------------------------------------------
 
-interface SnapshotEntry {
-	ref: string;
-	kind?: string;
-	label?: string;
-	disabled?: boolean;
-	value?: string;
-}
-
-function parseSnapshotEntries(snapshot: string): SnapshotEntry[] {
-	return snapshot
-		.split("\n")
-		.map((line) => {
-			const refMatch = line.match(/\bref=(e\d+|@e\d+)\b/);
-			if (!refMatch) return undefined;
-			const kindMatch = line.match(/^\s*-\s*([^\s]+)/);
-			const quotedMatch = line.match(/"([^"]*)"/);
-			const valueMatch = line.match(/:\s*(.+)$/);
-			return {
-				ref: refMatch[1].startsWith("@") ? refMatch[1] : `@${refMatch[1]}`,
-				kind: kindMatch ? kindMatch[1] : undefined,
-				label: quotedMatch ? quotedMatch[1] : undefined,
-				value: valueMatch ? valueMatch[1].trim() : undefined,
-				disabled: /\bdisabled\b/.test(line),
-			};
-		})
-		.filter(Boolean) as SnapshotEntry[];
-}
-
 function findLabeledEntry(
 	snapshot: string,
 	kind: string,
 	labels: readonly string[],
-): SnapshotEntry | undefined {
+): ParsedSnapshotEntry | undefined {
 	return parseSnapshotEntries(snapshot).find(
 		(e) => e.kind === kind && labelMatches(e.label, labels) && !e.disabled,
 	);
 }
+
