@@ -319,6 +319,16 @@ function sleep(ms: number): Promise<void> {
 // AIJobRunner
 // ---------------------------------------------------------------------------
 
+/**
+ * AIJobRunner — orchestrates a complete oracle job lifecycle.
+ *
+ * Coordinates the infrastructure (browser layer) and domain (AIProviderPage)
+ * to execute a single job: launch browser → verify auth → send prompt →
+ * wait for response → download artifacts.
+ *
+ * This class is the application/service layer. It does NOT know about
+ * specific providers — it delegates to AIProviderPage for all provider-specific logic.
+ */
 export class AIJobRunner {
 	private job: JobState;
 	private provider: AIProviderPage;

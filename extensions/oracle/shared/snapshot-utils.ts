@@ -1,5 +1,9 @@
-// shared/snapshot-utils.ts - Snapshot parsing utilities (extracted from workers)
-
+/**
+ * Pure utilities for parsing Playwright accessibility snapshots.
+ *
+ * All exported functions are @pure: no side effects, result depends only on input.
+ * This makes them trivially testable without mocks or a browser.
+ */
 export interface ParsedSnapshotEntry {
 	line: string;
 	ref: string;
