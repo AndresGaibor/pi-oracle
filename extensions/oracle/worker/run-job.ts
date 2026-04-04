@@ -4,6 +4,7 @@ import { appendFile, chmod, mkdir, readFile, rename, rm, stat, writeFile } from 
 import { basename, dirname, join } from "node:path";
 import { spawn } from "node:child_process";
 import { parseSnapshotEntries, findEntry, findLastEntry, type ParsedSnapshotEntry } from "../shared/snapshot-utils";
+import { isResponseComplete, findArtifactCandidates } from "../pages/chatgpt/chatgpt.assertions";
 import { buildLoginProbeScript, classifyChatPage, type LoginProbeResult, type ClassifyResult, type PageState } from "../shared/login-utils";
 import * as browser from "../lib/browser";
 import { MODEL_FAMILY_PREFIX, EFFORT_LABELS } from "../pages/chatgpt/chatgpt.selectors";
@@ -690,10 +691,9 @@ async function waitForStableChatUrl(job: any, previousChatUrl: string | undefine
   return previousChatUrl || stripQuery(await currentUrl(job));
 }
 
+// Snapshot-based completion detector delegates to chatgpt.assertions.isResponseComplete
 function snapshotShowsCompletedResponse(snapshot: string) {
-  const hasStopStreaming = snapshotHasLabel(snapshot, "button", CHATGPT_LABELS.stop);
-  const hasCopyResponse = snapshotHasLabel(snapshot, "button", CHATGPT_LABELS.copyResponse);
-  return hasCopyResponse && !hasStopStreaming;
+  return isResponseComplete(snapshot);
 }
 
 async function waitForChatCompletion(job: any, baselineAssistantCount: number) {
@@ -734,13 +734,6 @@ async function detectType(path: string) {
   return result.stdout || "unknown";
 }
 
-function isLikelyArtifactLabel(label: any) {
-  const normalized = String(label || "").trim();
-  if (!normalized) return false;
-  const upper = normalized.toUpperCase();
-  if (upper === "ATTACHED" || upper === "DONE") return true;
-  return /(?:^|[^\w])[^\n]*\.[A-Za-z0-9]{1,12}(?:$|[^\w])/.test(normalized);
-}
 
 function preferredArtifactName(label: any, index: number) {
   const normalized = String(label || "").trim();
@@ -749,37 +742,6 @@ function preferredArtifactName(label: any, index: number) {
   return `artifact-${String(index + 1).padStart(2, "0")}`;
 }
 
-function artifactCandidatesFromEntries(entries: ParsedSnapshotEntry[]) {
-  const excluded = new Set([
-    "Copy response",
-    "Good response",
-    "Bad response",
-    "Share",
-    "Switch model",
-    "More actions",
-    ...CHATGPT_LABELS.addFiles,
-    "Start dictation",
-    "Start Voice",
-    ...CHATGPT_LABELS.modelSelector,
-    "Open conversation options",
-    "Scroll to bottom",
-    ...CHATGPT_LABELS.close,
-  ]);
-
-  const seen = new Set();
-  const candidates = [];
-  for (const entry of entries) {
-    if (!entry.label) continue;
-    if (excluded.has(entry.label)) continue;
-    if (entry.label.startsWith("Thought for ")) continue;
-    if (entry.kind !== "button" && entry.kind !== "link") continue;
-    if (!isLikelyArtifactLabel(entry.label)) continue;
-    if (seen.has(entry.label)) continue;
-    seen.add(entry.label);
-    candidates.push({ label: entry.label, ref: entry.ref });
-  }
-  return candidates;
-}
 
 async function collectArtifactCandidates(job: any, responseIndex: number) {
   const snapshot = await snapshotText(job);
@@ -788,7 +750,7 @@ async function collectArtifactCandidates(job: any, responseIndex: number) {
   return {
     snapshot,
     targetSlice,
-    candidates: artifactCandidatesFromEntries(parseSnapshotEntries(targetSlice)),
+    candidates: findArtifactCandidates(targetSlice),
   };
 }
 
