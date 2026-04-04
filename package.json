@@ -4,7 +4,7 @@
 	"description": "ChatGPT web-oracle extension for pi with isolated browser auth, async jobs, and project-context archives.",
 	"private": false,
 	"license": "MIT",
-	"author": "Mitch Fultz (https://github.com/fitchmultz)",
+"author": "Andres Gaibor (https://github.com/AndresGaibor)",
 	"type": "module",
 	"keywords": [
 		"pi-package",
@@ -16,12 +16,12 @@
 	],
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/fitchmultz/pi-oracle.git"
+		"url": "git+https://github.com/AndresGaibor/pi-oracle.git"
 	},
 	"bugs": {
-		"url": "https://github.com/fitchmultz/pi-oracle/issues"
+		"url": "https://github.com/AndresGaibor/pi-oracle/issues"
 	},
-	"homepage": "https://github.com/fitchmultz/pi-oracle#readme",
+"homepage": "https://github.com/AndresGaibor/pi-oracle#readme",
 	"publishConfig": {
 		"access": "public"
 	},
