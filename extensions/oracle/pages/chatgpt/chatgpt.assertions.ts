@@ -2,61 +2,8 @@
  * ChatGPT Assertions – state checks and queries for the ChatGPT page.
  * Each method returns a boolean or structured data about the page state.
  */
+import { parseSnapshotEntries, findEntry, findLastEntry, type ParsedSnapshotEntry } from "../../shared/snapshot-utils";
 import { CHATGPT_LABELS, CHATGPT_SELECTORS, MODEL_FAMILY_PREFIX, EFFORT_LABELS, labelMatches } from "./chatgpt.selectors";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface SnapshotEntry {
-	ref: string;
-	kind?: string;
-	label?: string;
-	disabled?: boolean;
-	value?: string;
-}
-
-// ---------------------------------------------------------------------------
-// Snapshot parsing (shared)
-// ---------------------------------------------------------------------------
-
-function parseSnapshotEntries(snapshot: string): SnapshotEntry[] {
-	return snapshot
-		.split("\n")
-		.map((line) => {
-			const refMatch = line.match(/\bref=(e\d+|@e\d+)\b/);
-			if (!refMatch) return undefined;
-			const kindMatch = line.match(/^\s*-\s*([^\s]+)/);
-			const quotedMatch = line.match(/"([^"]*)"/);
-			const valueMatch = line.match(/:\s*(.+)$/);
-			return {
-				ref: refMatch[1].startsWith("@") ? refMatch[1] : `@${refMatch[1]}`,
-				kind: kindMatch ? kindMatch[1] : undefined,
-				label: quotedMatch ? quotedMatch[1] : undefined,
-				value: valueMatch ? valueMatch[1].trim() : undefined,
-				disabled: /\bdisabled\b/.test(line),
-			};
-		})
-		.filter(Boolean) as SnapshotEntry[];
-}
-
-function findEntry(
-	snapshot: string,
-	predicate: (e: SnapshotEntry) => boolean,
-): SnapshotEntry | undefined {
-	return parseSnapshotEntries(snapshot).find(predicate);
-}
-
-function findLastEntry(
-	snapshot: string,
-	predicate: (e: SnapshotEntry) => boolean,
-): SnapshotEntry | undefined {
-	const entries = parseSnapshotEntries(snapshot);
-	for (let i = entries.length - 1; i >= 0; i -= 1) {
-		if (predicate(entries[i])) return entries[i];
-	}
-	return undefined;
-}
 
 // ---------------------------------------------------------------------------
 // UI presence assertions
@@ -104,7 +51,7 @@ export function hasStopButton(snapshot: string): boolean {
 // ---------------------------------------------------------------------------
 
 /** Find model button entry for a given family */
-export function findModelButton(snapshot: string, family: string): SnapshotEntry | undefined {
+export function findModelButton(snapshot: string, family: string): ParsedSnapshotEntry | undefined {
 	const prefix = MODEL_FAMILY_PREFIX[family] || "";
 	return findEntry(
 		snapshot,
@@ -271,4 +218,4 @@ export function buildAssistantMessagesScript(): string {
 // ---------------------------------------------------------------------------
 
 export { parseSnapshotEntries, findEntry, findLastEntry };
-export type { SnapshotEntry };
+export type { ParsedSnapshotEntry as SnapshotEntry };
