@@ -4,31 +4,19 @@
  * Usage:
  *   bun run scripts/debug-headed.ts
  */
-import { existsSync } from "node:fs";
-import { rm } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { rm } from "node:fs/promises";
 import * as browser from "../extensions/oracle/lib/browser";
 import { readChatGPTCookies, type Cookie } from "../extensions/oracle/lib/cookies";
+import { resolveBrowserPath } from "../extensions/oracle/lib/browser-detection";
+import { getCookiePath } from "../extensions/oracle/lib/cookie-paths";
 
-// ---------------------------------------------------------------------------
-// Config
-// ---------------------------------------------------------------------------
-
-const BRAVE_PATH = "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser";
-const CHROME_PATH = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const CHATGPT_URL = "https://chatgpt.com/";
 
-const BRAVE_PROFILE = join(
-	homedir(),
-	"Library",
-	"Application Support",
-	"BraveSoftware",
-	"Brave-Browser",
-	"Default",
-);
+const detectedBrowser = resolveBrowserPath();
+const EXECUTABLE = detectedBrowser.source !== "fallback" ? detectedBrowser.executablePath : undefined;
+const BRAVE_PROFILE = getCookiePath(detectedBrowser.name === "brave" ? "brave" : "chrome") ?? "";
 
-const EXECUTABLE = existsSync(BRAVE_PATH) ? BRAVE_PATH : CHROME_PATH;
 const USER_DATA_DIR = join("/tmp", "pi-oracle-debug-profile");
 
 // ---------------------------------------------------------------------------

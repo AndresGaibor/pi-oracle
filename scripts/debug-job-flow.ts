@@ -3,19 +3,16 @@
  * Debug Job Flow Script
  * Uses AIJobRunner class from lib for orchestrated job execution
  */
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import { AIJobRunner, type JobState, type JobConfig } from "../extensions/oracle/lib/ai-job-runner";
+import { resolveBrowserPath } from "../extensions/oracle/lib/browser-detection";
+import { getCookiePath } from "../extensions/oracle/lib/cookie-paths";
 
-const BRAVE_PROFILE = join(
-	homedir(),
-	"Library",
-	"Application Support",
-	"BraveSoftware",
-	"Brave-Browser",
-	"Default",
-);
+const detectedBrowser = resolveBrowserPath();
+const detectedExecutable = detectedBrowser.source !== "fallback" ? detectedBrowser.executablePath : undefined;
+const BRAVE_PROFILE = getCookiePath(detectedBrowser.name === "brave" ? "brave" : "chrome") ?? "/tmp/oracle-fallback-profile";
+
 
 // Helper: simple logger
 function createLogger() {
@@ -42,7 +39,8 @@ async function main() {
 		// Build minimal JobConfig
 		const config: JobConfig = {
 			browser: {
-				executablePath: "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+				executablePath: detectedExecutable,
+
 				chatUrl: "https://chatgpt.com/",
 				authSeedProfileDir: BRAVE_PROFILE,
 				runtimeProfilesDir: "/tmp",
