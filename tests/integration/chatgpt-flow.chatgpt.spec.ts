@@ -1,5 +1,4 @@
 import { test, expect, type Page } from "@playwright/test";
-import { existsSync } from "node:fs";
 
 /**
  * Test de integración: Flujo completo de ChatGPT.
@@ -9,18 +8,17 @@ import { existsSync } from "node:fs";
  * - Conexión a internet activa
  *
  * Para ejecutar:
- *   npx playwright test tests/integration/chatgpt-flow.chatgpt.spec.ts
+ *   1. npx tsx scripts/save-chatgpt-cookies.ts
+ *   2. Remove the .skip() below
+ *   3. npx playwright test tests/integration/chatgpt-flow.chatgpt.spec.ts
  */
 
-const COOKIE_FILE = ".auth/chatgpt-cookies.json";
-const hasCookies = existsSync(COOKIE_FILE);
-
-test.describe.skipIf(!hasCookies)("ChatGPT full flow", () => {
+test.describe.skip("ChatGPT full flow", () => {
     let page: Page;
 
     test.beforeEach(async ({ browser }) => {
         const context = await browser.newContext({
-            storageState: COOKIE_FILE,
+            storageState: ".auth/chatgpt-cookies.json",
         });
         page = await context.newPage();
     });
@@ -28,11 +26,8 @@ test.describe.skipIf(!hasCookies)("ChatGPT full flow", () => {
     test("debe navegar a chatgpt.com y detectar composer", async () => {
         await page.goto("https://chatgpt.com/");
 
-        // Esperar al textarea del prompt
         const promptTextarea = page.locator("#prompt-textarea");
         await promptTextarea.waitFor({ state: "visible", timeout: 30_000 });
-
-        // Verificar que el composer está presente
         await expect(promptTextarea).toBeVisible();
     });
 
@@ -42,17 +37,12 @@ test.describe.skipIf(!hasCookies)("ChatGPT full flow", () => {
         const promptTextarea = page.locator("#prompt-textarea");
         await promptTextarea.waitFor({ state: "visible", timeout: 30_000 });
 
-        // Enviar prompt simple
-        await promptTextarea.click();
-        await promptTextarea.pressSequentially("Say 'hello' and nothing else", { delay: 10 });
+        await promptTextarea.fill("Say 'hello' and nothing else");
         await page.keyboard.press("Enter");
 
-        // Esperar a que la respuesta termine
-        // The send button reappears when streaming is done
         const sendButton = page.locator('[data-testid="send-button"]');
         await sendButton.waitFor({ state: "visible", timeout: 120_000 });
 
-        // Verificar que existe un mensaje del asistente
         const assistantMessage = page.locator('[data-message-author-role="assistant"]').last();
         await expect(assistantMessage).toBeVisible();
 
@@ -67,7 +57,6 @@ test.describe.skipIf(!hasCookies)("ChatGPT full flow", () => {
         await expect(newChatButton).toBeVisible();
         await newChatButton.click();
 
-        // Verify URL changed to a new conversation
         await page.waitForURL(/\/c\//, { timeout: 10_000 });
     });
 });

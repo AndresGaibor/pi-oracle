@@ -1,19 +1,20 @@
 import { test, expect } from "@playwright/test";
-import { existsSync } from "node:fs";
 
 /**
  * Test de integración: Clasificación de páginas de ChatGPT.
  *
  * REQUISITOS:
- * - Cookies válidas de ChatGPT
+ * - Cookies válidas de ChatGPT (archivo .auth/chatgpt-cookies.json)
+ *
+ * Para ejecutar, remover .skip y:
+ *   npx playwright test tests/integration/page-classification.chatgpt.spec.ts
  */
 
-const COOKIE_FILE = ".auth/chatgpt-cookies.json";
-const hasCookies = existsSync(COOKIE_FILE);
-
-test.describe.skipIf(!hasCookies)("Page classification", () => {
+test.describe.skip("Page classification", () => {
     test("debe clasificar correctamente la página de login", async ({ browser }) => {
-        const context = await browser.newContext();
+        const context = await browser.newContext({
+            storageState: ".auth/chatgpt-cookies.json",
+        });
         const page = await context.newPage();
         await page.goto("https://chatgpt.com/auth/login");
 
