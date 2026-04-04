@@ -1,0 +1,5 @@
+  - heading "Just a moment..." [level="1"] ref=e3
+  - heading "Verify you are human" [level="2"] ref=e5
+  - paragraph "Please complete the verification challenge to continue" ref=e7
+  - iframe "Verification challenge" ref=e10
+  - button "Verify" ref=e12

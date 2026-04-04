@@ -1,0 +1,6 @@
+- link "ChatGPT" ref=e1
+  - heading "GPT-5 is thinking" [level="2"] ref=e8
+  - text "thinking..." ref=e9
+  - text "Analyzing your request step by step" ref=e11
+  - button "Stop streaming" ref=e25
+    - text "Here's a partial response to your" ref=e31

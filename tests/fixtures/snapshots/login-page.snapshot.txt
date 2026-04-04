@@ -1,0 +1,5 @@
+  - heading "Log in" [level="1"] ref=e4
+  - link "Log in" ref=e6
+  - link "Sign up" ref=e8
+  - button "Log in with Google" ref=e9
+  - button "Log in with Microsoft" ref=e10

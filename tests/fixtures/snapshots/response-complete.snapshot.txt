@@ -1,0 +1,14 @@
+- link "ChatGPT" ref=e1
+  - heading "ChatGPT" [level="1"] ref=e2
+  - generic ref=e50
+    - heading "GPT-5 thinks" [level="2"] ref=e8
+    - button "Thought for 12 seconds" ref=e9
+  - generic ref=e30
+    - text "Here is the full response to your question." ref=e31
+  - button "Copy response" ref=e40
+  - button "Copy code" ref=e41
+  - button "Good response" ref=e42
+  - button "Bad response" ref=e43
+  - button "Regenerate" ref=e44
+  - textbox "Message ChatGPT" ref=e50
+  - button "Send prompt" ref=e55

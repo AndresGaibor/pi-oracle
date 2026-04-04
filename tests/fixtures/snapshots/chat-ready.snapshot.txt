@@ -1,0 +1,8 @@
+- link "ChatGPT" ref=e1
+- link "New chat" ref=e2
+- link "Today" ref=e3
+  - heading "What can I help with?" [level="1"] ref=e7
+  - textbox "Message ChatGPT" ref=e10
+  - button "Add files and more" ref=e20
+  - button "Model selector" ref=e21
+  - button "Send prompt" ref=e22

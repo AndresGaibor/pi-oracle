@@ -1,0 +1,4 @@
+  - heading "Something went wrong" [level="1"] ref=e3
+  - paragraph "An error occurred while connecting to the websocket" ref=e5
+  - paragraph "Please try again later" ref=e7
+  - button "Try again" ref=e9
