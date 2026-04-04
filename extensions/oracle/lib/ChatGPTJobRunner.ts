@@ -14,7 +14,7 @@ import { createHash } from "node:crypto";
 import * as browser from "../lib/browser";
 import { ChatGPTPage } from "../pages/chatgpt/chatgpt.page";
 import type { BrowserActions } from "../pages/browser-actions.types";
-import { CHATGPT_LABELS as DEFAULT_LABELS } from "../pages/chatgpt/chatgpt.selectors";
+import { CHATGPT_LABELS as DEFAULT_LABELS, MODEL_FAMILY_PREFIX, EFFORT_LABELS } from "../pages/chatgpt/chatgpt.selectors";
 import { parseSnapshotEntries, findEntry, findLastEntry, type ParsedSnapshotEntry } from "../shared/snapshot-utils";
 
 // ---------------------------------------------------------------------------
@@ -27,19 +27,6 @@ const LABELS = {
 	close: ["Close", "Cerrar"],
 	configure: ["Configure...", "Configurar..."],
 	autoSwitchToThinking: ["Auto-switch to Thinking", "Cambio automático a Thinking", "Cambio automático a Pensando"],
-};
-
-const MODEL_FAMILY_PREFIX: Record<string, string> = {
-	instant: "Instant ",
-	thinking: "Thinking ",
-	pro: "Pro ",
-};
-
-const EFFORT_LABELS: Record<string, string[]> = {
-	light: ["Light", "Ligero"],
-	standard: ["Standard", "Estándar", "Ampliado", "Razonamiento ampliado"],
-	extended: ["Extended", "Extendido"],
-	heavy: ["Heavy", "Alto"],
 };
 
 const ARTIFACT_CANDIDATE_STABILITY_TIMEOUT_MS = 15_000;
@@ -137,7 +124,7 @@ function labelMatches(label: unknown, candidates: string[]): boolean {
 function effortLabelsFor(effortLabel: string): string[] {
 	if (!effortLabel) return [];
 	const key = effortLabel.toLowerCase();
-	return EFFORT_LABELS[key] || [effortLabel];
+	return (EFFORT_LABELS[key] as string[]) || [effortLabel];
 }
 
 function allEffortLabels(): string[] {
@@ -217,8 +204,8 @@ function snapshotWeaklyMatchesRequestedModel(snapshot: string, job: JobState): b
 }
 
 function snapshotShowsCompletedResponse(snapshot: string): boolean {
-	const hasStopStreaming = /Stop streaming|Detener la transmisión|Detener streaming/i.test(snapshot);
-	const hasCopyResponse = /Copy response|Copiar respuesta/i.test(snapshot);
+	const hasStopStreaming = snapshotHasLabel(snapshot, "button", LABELS.stop as unknown as readonly string[]);
+	const hasCopyResponse = snapshotHasLabel(snapshot, "button", LABELS.copyResponse as unknown as readonly string[]);
 	return hasCopyResponse && !hasStopStreaming;
 }
 

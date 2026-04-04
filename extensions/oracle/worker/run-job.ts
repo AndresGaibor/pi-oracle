@@ -6,6 +6,7 @@ import { spawn } from "node:child_process";
 import { parseSnapshotEntries, findEntry, findLastEntry, type ParsedSnapshotEntry } from "../shared/snapshot-utils";
 import { buildLoginProbeScript, classifyChatPage, type LoginProbeResult, type ClassifyResult, type PageState } from "../shared/login-utils";
 import * as browser from "../lib/browser";
+import { MODEL_FAMILY_PREFIX, EFFORT_LABELS } from "../pages/chatgpt/chatgpt.selectors";
 
 const jobId = process.argv[2];
 if (!jobId) {
@@ -24,20 +25,11 @@ const CHATGPT_LABELS = {
   autoSwitchToThinking: ["Auto-switch to Thinking", "Cambio automático a Thinking", "Cambio automático a Pensando"],
   configure: ["Configure...", "Configurar..."],
   modelSelector: ["Model selector", "Selector de modelo"],
+  stop: ["Stop streaming", "Stop generating", "Detener la transmisión", "Detener generacion", "Detener"],
+  copyResponse: ["Copy response", "Copiar respuesta"],
 };
 
-const MODEL_FAMILY_PREFIX: Record<string, string> = {
-  instant: "Instant ",
-  thinking: "Thinking ",
-  pro: "Pro ",
-};
-
-const EFFORT_LABELS: Record<string, string[]> = {
-  light: ["Light", "Ligero"],
-  standard: ["Standard", "Estándar", "Ampliado", "Razonamiento ampliado"],
-  extended: ["Extended", "Extendido"],
-  heavy: ["Heavy", "Alto"],
-};
+// MODEL_FAMILY_PREFIX and EFFORT_LABELS imported from chatgpt.selectors as source of truth
 
 const ORACLE_STATE_DIR = "/tmp/pi-oracle-state";
 const LOCKS_DIR = join(ORACLE_STATE_DIR, "locks");
@@ -73,7 +65,7 @@ function findLabeledEntry(snapshot: string, kind: string, labels: string[], pred
 function effortLabelsFor(effortLabel: string): string[] {
   if (!effortLabel) return [];
   const key = effortLabel.toLowerCase();
-  return EFFORT_LABELS[key] || [effortLabel];
+  return (EFFORT_LABELS[key] as string[]) || [effortLabel];
 }
 
 function allEffortLabels(): string[] {
@@ -699,8 +691,8 @@ async function waitForStableChatUrl(job: any, previousChatUrl: string | undefine
 }
 
 function snapshotShowsCompletedResponse(snapshot: string) {
-  const hasStopStreaming = /Stop streaming|Detener la transmisión|Detener streaming/i.test(snapshot);
-  const hasCopyResponse = /Copy response|Copiar respuesta/i.test(snapshot);
+  const hasStopStreaming = snapshotHasLabel(snapshot, "button", CHATGPT_LABELS.stop);
+  const hasCopyResponse = snapshotHasLabel(snapshot, "button", CHATGPT_LABELS.copyResponse);
   return hasCopyResponse && !hasStopStreaming;
 }
 
