@@ -4,7 +4,7 @@
  * send prompt → wait for response → download artifacts.
  *
  * Clean architecture: this is the application/service layer that coordinates
- * the infrastructure (browser) and domain (ChatGPTPage) layers.
+ * the infrastructure (browser) and domain (AIProviderPage) layers.
  *
  * SNAPSHOT FORMAT & SELECTOR STRATEGY:
  * ───────────────────────────────────────────────────────────────────────────────
@@ -43,7 +43,7 @@ import { basename, join } from "node:path";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import * as browser from "../lib/browser";
-import { ChatGPTPage } from "../pages/chatgpt/chatgpt.page";
+import type { AIProviderPage } from "../pages/ai-provider.types";
 import type { BrowserActions } from "../pages/browser-actions.types";
 import { CHATGPT_LABELS as DEFAULT_LABELS, MODEL_FAMILY_PREFIX, EFFORT_LABELS } from "../pages/chatgpt/chatgpt.selectors";
 import { parseSnapshotEntries, findEntry, findLastEntry, type ParsedSnapshotEntry } from "../shared/snapshot-utils";
@@ -143,7 +143,7 @@ export interface JobResult {
 }
 
 // ---------------------------------------------------------------------------
-// Browser adapter – implements BrowserActions for ChatGPTPage
+// Browser adapter – implements BrowserActions for AIProviderPage
 // ---------------------------------------------------------------------------
 
 const browserActions: BrowserActions = {
@@ -156,6 +156,7 @@ const browserActions: BrowserActions = {
 	press: (key: string, pageId?: string) => browser.press(key, pageId),
 	screenshot: (dest: string, pageId?: string) => browser.screenshot(dest, pageId),
 	getMainPageId: () => browser.getMainPageId(),
+	getCurrentUrl: () => browser.getUrl(),
 };
 
 // ---------------------------------------------------------------------------
@@ -361,7 +362,7 @@ function sleep(ms: number): Promise<void> {
 
 export class ChatGPTJobRunner {
 	private job: JobState;
-	private chatGPT: ChatGPTPage;
+	private provider: AIProviderPage;
 	private logFn: (message: string) => Promise<void>;
 	private heartbeatFn: (patch?: unknown, options?: unknown) => Promise<void>;
 	private browserStarted = false;
@@ -370,9 +371,10 @@ export class ChatGPTJobRunner {
 		job: JobState,
 		logFn: (message: string) => Promise<void>,
 		heartbeatFn: (patch?: unknown, options?: unknown) => Promise<void>,
+		provider: AIProviderPage,
 	) {
 		this.job = job;
-		this.chatGPT = new ChatGPTPage(job.config.browser.chatUrl);
+		this.provider = provider;
 		this.logFn = logFn;
 		this.heartbeatFn = heartbeatFn;
 	}
@@ -417,17 +419,17 @@ export class ChatGPTJobRunner {
 	// -----------------------------------------------------------------------
 
 	async sendPrompt(prompt: string): Promise<{ baselineAssistantCount: number }> {
-		const baselineAssistantCount = (await this.chatGPT.getAssistantMessages(browserActions)).length;
+		const baselineAssistantCount = (await this.provider.getAssistantMessages(browserActions)).length;
 		await this.logFn(`Assistant response count before send: ${baselineAssistantCount}`);
 
 		// Click composer
-		await this.chatGPT.clickComposer(browserActions);
+		await this.provider.clickComposer(browserActions);
 
 		// Type prompt via JS
-		await this.chatGPT.typePrompt(browserActions, prompt);
+		await this.provider.typePrompt(browserActions, prompt);
 
 		// Click send
-		await this.chatGPT.clickSend(browserActions);
+		await this.provider.clickSend(browserActions);
 
 		return { baselineAssistantCount };
 	}
@@ -495,7 +497,7 @@ export class ChatGPTJobRunner {
 		while (Date.now() < timeoutAt) {
 			await this.heartbeatFn();
 			const snapshot = await browser.snapshotText();
-			const messages = await this.chatGPT.getAssistantMessages(browserActions);
+			const messages = await this.provider.getAssistantMessages(browserActions);
 			const targetMessage = messages[baselineAssistantCount];
 			const targetText = targetMessage?.text || "";
 			// Use snapshot to check if "Stop generating" button is gone and "Copy response" appeared
@@ -738,7 +740,7 @@ export class ChatGPTJobRunner {
 				.catch(() => undefined)
 				.finally(() => { heartbeatRunning = false; });
 		}, intervalMs);
-		(timer as any).unref?.();
+		(timer as unknown as { unref?: () => void }).unref?.();
 		try {
 			return await task();
 		} finally {

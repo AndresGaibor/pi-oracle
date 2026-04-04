@@ -27,5 +27,5 @@ export interface BrowserActions {
 	/** Reload the page */
 	reload?(pageId?: string): Promise<void>;
 	/** Get current URL */
-	getUrl?(pageId?: string): Promise<string>;
+	getCurrentUrl(): Promise<string>;
 }

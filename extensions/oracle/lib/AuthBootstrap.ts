@@ -94,6 +94,7 @@ const browserActions: BrowserActions = {
 	press: (key: string, pageId?: string) => browser.press(key, pageId),
 	screenshot: (dest: string, pageId?: string) => browser.screenshot(dest, pageId),
 	getMainPageId: () => browser.getMainPageId(),
+	getCurrentUrl: () => browser.getUrl(),
 };
 
 // ---------------------------------------------------------------------------
