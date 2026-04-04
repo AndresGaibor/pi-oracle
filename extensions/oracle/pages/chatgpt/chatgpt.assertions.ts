@@ -190,13 +190,13 @@ export function findArtifactCandidates(snapshot: string): Array<{ label: string;
 	return candidates;
 }
 
-function isLikelyArtifactLabel(label: string): boolean {
+export function isLikelyArtifactLabel(label: string): boolean {
 	const normalized = label.trim();
 	if (!normalized) return false;
 	const upper = normalized.toUpperCase();
 	if (upper === "ATTACHED" || upper === "DONE") return true;
-	return /(?:^|[^\w])[^\n]*\.[A-Za-z0-9]{1,12}(?:$|[^\w])/.test(normalized);
-}
+	return /(?:^|[^\\w])[^\n]*\.[A-Za-z0-9]{1,12}(?:$|[^\\w])/.test(normalized);
+	}
 
 // ---------------------------------------------------------------------------
 // Message extraction
