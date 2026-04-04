@@ -9,6 +9,7 @@ import { ensureAccountCookie, filterImportableAuthCookies } from "./auth-cookie-
 import { parseSnapshotEntries, findEntry, findLastEntry, labelMatches, type ParsedSnapshotEntry } from "../shared/snapshot-utils";
 import { buildLoginProbeScript, classifyChatPage, type LoginProbeResult, type ClassifyResult, type PageState } from "../shared/login-utils";
 import * as browser from "../lib/browser";
+import { AUTH_STEP_SETTLE_MS, AUTH_RETRY_POLL_MS } from "../lib/constants";
 
 // Extended probe result for auth-bootstrap with extra diagnostic fields
 interface AuthBootstrapProbeResult extends LoginProbeResult {
@@ -111,7 +112,7 @@ async function acquireLock(kind: string, key: string, metadata: any, timeoutMs =
       if (!(error && typeof error === "object" && "code" in error && error.code === "EEXIST")) throw error;
       if (await maybeReclaimStaleLock(path)) continue;
     }
-    await sleep(200);
+    await sleep(AUTH_RETRY_POLL_MS);
   }
 
   throw new Error(`Timed out waiting for oracle ${kind} lock: ${key}`);
@@ -537,14 +538,14 @@ async function waitForImportedAuthReady() {
         attemptedAuthUrl = true;
         await log(`Backend session is authenticated but shell is public; opening auth URL ${config.browser.authUrl} to force session resolution`);
         await openUrl(config.browser.authUrl, config.browser.authUrl);
-        await sleep(1500);
+        await sleep(AUTH_STEP_SETTLE_MS);
         continue;
       }
       if (!attemptedAccountChooser && (probe?.bodyHasId || probe?.bodyHasEmail)) {
         attemptedAccountChooser = await maybeSelectAccountIdentity(snapshot, probe);
         if (attemptedAccountChooser) {
           await log("Auth transition click dispatched; waiting for authenticated shell to settle");
-          await sleep(1500);
+          await sleep(AUTH_STEP_SETTLE_MS);
           continue;
         }
         await log(`No account/login resolution click target found. Snapshot entries: ${parseSnapshotEntries(snapshot).map((entry: ParsedSnapshotEntry) => `${entry.kind}:${entry.label || entry.value || entry.ref}`).join(' | ')}`);
@@ -553,7 +554,7 @@ async function waitForImportedAuthReady() {
         retriedAuthTransition = true;
         await log("Auth looks accepted but page is still public-looking; reloading once after hydration grace period");
         await reload();
-        await sleep(1500);
+        await sleep(AUTH_STEP_SETTLE_MS);
         continue;
       }
       if (elapsedMs >= 20_000) {
@@ -567,7 +568,7 @@ async function waitForImportedAuthReady() {
       retriedOutage = true;
       await log("Transient outage detected; reloading once");
       await reload();
-      await sleep(1500);
+      await sleep(AUTH_STEP_SETTLE_MS);
       continue;
     }
     if (classification.state === "challenge_blocking") {
