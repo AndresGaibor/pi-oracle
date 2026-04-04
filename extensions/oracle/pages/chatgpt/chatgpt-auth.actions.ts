@@ -1,69 +1,17 @@
 /**
  * ChatGPT Auth Actions – browser interactions for authentication flow.
  */
+import { parseSnapshotEntries, findEntry, findLastEntry, type ParsedSnapshotEntry } from "../../shared/snapshot-utils";
 import type { BrowserActions } from "../browser-actions.types";
 import { AUTH_SELECTORS, AUTH_LABELS, labelMatches } from "./chatgpt-auth.selectors";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface SnapshotEntry {
-	ref: string;
-	kind?: string;
-	label?: string;
-	disabled?: boolean;
-	href?: string;
-}
-
-// ---------------------------------------------------------------------------
-// Snapshot parsing (shared)
-// ---------------------------------------------------------------------------
-
-function parseSnapshotEntries(snapshot: string): SnapshotEntry[] {
-	return snapshot
-		.split("\n")
-		.map((line) => {
-			const refMatch = line.match(/\bref=(e\d+|@e\d+)\b/);
-			if (!refMatch) return undefined;
-			const kindMatch = line.match(/^\s*-\s*([^\s]+)/);
-			const quotedMatch = line.match(/"([^"]*)"/);
-			const hrefMatch = line.match(/href="([^"]+)"/);
-			return {
-				ref: refMatch[1].startsWith("@") ? refMatch[1] : `@${refMatch[1]}`,
-				kind: kindMatch ? kindMatch[1] : undefined,
-				label: quotedMatch ? quotedMatch[1] : undefined,
-				href: hrefMatch ? hrefMatch[1] : undefined,
-				disabled: /\bdisabled\b/.test(line),
-			};
-		})
-		.filter(Boolean) as SnapshotEntry[];
-}
-
-function findEntry(
-	snapshot: string,
-	predicate: (e: SnapshotEntry) => boolean,
-): SnapshotEntry | undefined {
-	return parseSnapshotEntries(snapshot).find(predicate);
-}
-
-function findLastEntry(
-	snapshot: string,
-	predicate: (e: SnapshotEntry) => boolean,
-): SnapshotEntry | undefined {
-	const entries = parseSnapshotEntries(snapshot);
-	for (let i = entries.length - 1; i >= 0; i -= 1) {
-		if (predicate(entries[i])) return entries[i];
-	}
-	return undefined;
-}
 
 // ---------------------------------------------------------------------------
 // Login actions
 // ---------------------------------------------------------------------------
 
 /** Find login button entry in snapshot */
-export function findLoginButton(snapshot: string): SnapshotEntry | undefined {
+export function findLoginButton(snapshot: string): ParsedSnapshotEntry | undefined {
 	return findEntry(
 		snapshot,
 		(e) =>
@@ -75,7 +23,7 @@ export function findLoginButton(snapshot: string): SnapshotEntry | undefined {
 }
 
 /** Find login link entry in snapshot */
-export function findLoginLink(snapshot: string): SnapshotEntry | undefined {
+export function findLoginLink(snapshot: string): ParsedSnapshotEntry | undefined {
 	return findEntry(
 		snapshot,
 		(e) =>
@@ -131,4 +79,4 @@ export async function clickLoginCta(browser: BrowserActions): Promise<boolean> {
 // ---------------------------------------------------------------------------
 
 export { parseSnapshotEntries, findEntry, findLastEntry };
-export type { SnapshotEntry };
+export type { ParsedSnapshotEntry as SnapshotEntry };
