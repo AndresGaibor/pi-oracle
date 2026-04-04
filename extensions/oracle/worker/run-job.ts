@@ -7,7 +7,7 @@ import { parseSnapshotEntries, findEntry, findLastEntry, type ParsedSnapshotEntr
 import { isResponseComplete, findArtifactCandidates } from "../pages/chatgpt/chatgpt.assertions";
 import { buildLoginProbeScript, classifyChatPage, type LoginProbeResult, type ClassifyResult, type PageState } from "../shared/login-utils";
 import * as browser from "../lib/browser";
-import { MODEL_FAMILY_PREFIX, EFFORT_LABELS } from "../pages/chatgpt/chatgpt.selectors";
+import { CHATGPT_LABELS, MODEL_FAMILY_PREFIX, EFFORT_LABELS } from "../pages/chatgpt/chatgpt.selectors";
 
 const jobId = process.argv[2];
 if (!jobId) {
@@ -18,17 +18,6 @@ if (!jobId) {
 const jobDir = `/tmp/oracle-${jobId}`;
 const jobPath = `${jobDir}/job.json`;
 
-const CHATGPT_LABELS = {
-  composer: ["Chat with ChatGPT", "Chatear con ChatGPT", "Pregunta lo que quieras"],
-  addFiles: ["Add files and more", "Agregar archivos y más"],
-  send: ["Send prompt", "Send message", "Enviar prompt", "Enviar mensaje", "Enviar"],
-  close: ["Close", "Cerrar"],
-  autoSwitchToThinking: ["Auto-switch to Thinking", "Cambio automático a Thinking", "Cambio automático a Pensando"],
-  configure: ["Configure...", "Configurar..."],
-  modelSelector: ["Model selector", "Selector de modelo"],
-  stop: ["Stop streaming", "Stop generating", "Detener la transmisión", "Detener generacion", "Detener"],
-  copyResponse: ["Copy response", "Copiar respuesta"],
-};
 
 // MODEL_FAMILY_PREFIX and EFFORT_LABELS imported from chatgpt.selectors as source of truth
 
@@ -51,15 +40,15 @@ let shuttingDown = false;
 let lastHeartbeatMs = 0;
 let pageToken: string | null = null;
 
-function labelMatches(label: any, candidates: string[]): boolean {
-  return typeof label === "string" && candidates.includes(label);
+function labelMatches(label: any, candidates: readonly string[]): boolean {
+  return typeof label === "string" && (candidates as readonly string[]).includes(label);
 }
 
-function snapshotHasLabel(snapshot: string, kind: string, labels: string[]): boolean {
+function snapshotHasLabel(snapshot: string, kind: string, labels: readonly string[]): boolean {
   return labels.some((label) => snapshot.includes(`${kind} "${label}"`));
 }
 
-function findLabeledEntry(snapshot: string, kind: string, labels: string[], predicate: (entry: ParsedSnapshotEntry) => boolean = () => true) {
+function findLabeledEntry(snapshot: string, kind: string, labels: readonly string[], predicate: (entry: ParsedSnapshotEntry) => boolean = () => true) {
   return findEntry(snapshot, (candidate) => candidate.kind === kind && labelMatches(candidate.label, labels) && predicate(candidate));
 }
 
@@ -524,25 +513,19 @@ async function clickRef(_job: any, ref: string) {
   await browser.clickRef(ref);
 }
 
-async function clickLabeledEntry(job: any, label: string | string[], options: any = {}) {
+async function clickLabeledEntry(job: any, label: string | readonly string[], options: any = {}) {
   const labels = Array.isArray(label) ? label : [label];
   const snapshot = await snapshotText(job);
-  const entry = (options.last ? findLastEntry : findEntry)(
-    snapshot,
-    (candidate: ParsedSnapshotEntry) => labelMatches(candidate.label, labels) && (!options.kind || candidate.kind === options.kind) && !candidate.disabled,
-  );
-  if (!entry) throw new Error(`Could not find labeled entry: ${labels.join(" / ")}`);
+  const entry = (options.last ? findLastEntry : findEntry)(snapshot, (candidate: ParsedSnapshotEntry) => labelMatches(candidate.label, labels as readonly string[]) && (!options.kind || candidate.kind === options.kind) && !candidate.disabled, );
+  if (!entry) throw new Error(`Could not find labeled entry: ${(labels as readonly string[]).join(" / ")}`);
   await clickRef(job, entry.ref);
   return entry;
 }
 
-async function maybeClickLabeledEntry(job: any, label: string | string[], options: any = {}) {
+async function maybeClickLabeledEntry(job: any, label: string | readonly string[], options: any = {}) {
   const labels = Array.isArray(label) ? label : [label];
   const snapshot = await snapshotText(job);
-  const entry = (options.last ? findLastEntry : findEntry)(
-    snapshot,
-    (candidate: ParsedSnapshotEntry) => labelMatches(candidate.label, labels) && (!options.kind || candidate.kind === options.kind) && !candidate.disabled,
-  );
+  const entry = (options.last ? findLastEntry : findEntry)(snapshot, (candidate: ParsedSnapshotEntry) => labelMatches(candidate.label, labels as readonly string[]) && (!options.kind || candidate.kind === options.kind) && !candidate.disabled, );
   if (!entry) return false;
   await clickRef(job, entry.ref);
   return true;
