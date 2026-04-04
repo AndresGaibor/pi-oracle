@@ -2,7 +2,6 @@
  * ChatGPT Assertions – state checks and queries for the ChatGPT page.
  * Each method returns a boolean or structured data about the page state.
  */
-import { basename } from "node:path";
 import { parseSnapshotEntries, findEntry, findLastEntry, type ParsedSnapshotEntry } from "../../shared/snapshot-utils";
 import { CHATGPT_LABELS, CHATGPT_SELECTORS, MODEL_FAMILY_PREFIX, EFFORT_LABELS, labelMatches } from "./chatgpt.selectors";
 
@@ -197,12 +196,14 @@ export function isLikelyArtifactLabel(label: string): boolean {
 	const upper = normalized.toUpperCase();
 	if (upper === "ATTACHED" || upper === "DONE") return true;
 	return /(?:^|[^\\w])[^\n]*\.[A-Za-z0-9]{1,12}(?:$|[^\\w])/.test(normalized);
+}
 
 export function preferredArtifactName(label: string, index: number): string {
 	const normalized = String(label || "").trim();
 	const fileNameMatch = normalized.match(/([A-Za-z0-9._-]+\.[A-Za-z0-9]{1,12})(?!.*[A-Za-z0-9._-]+\.[A-Za-z0-9]{1,12})/);
-	if (fileNameMatch) return basename(fileNameMatch[1]).replace(/[^a-zA-Z0-9._-]/g, "_");
+	if (fileNameMatch) return fileNameMatch[1].replace(/[^a-zA-Z0-9._-]/g, "_");
 	return `artifact-${String(index + 1).padStart(2, "0")}`;
+	}
 
 // ---------------------------------------------------------------------------
 // Message extraction
