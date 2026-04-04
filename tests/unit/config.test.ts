@@ -53,12 +53,15 @@ describe("DEFAULT_CONFIG", () => {
     it("has browser config", () => {
         expect(DEFAULT_CONFIG.browser.sessionPrefix).toBe("oracle");
         expect(DEFAULT_CONFIG.browser.maxConcurrentJobs).toBe(2);
-        expect(DEFAULT_CONFIG.browser.cloneStrategy).toBe("apfs-clone");
+        // cloneStrategy is platform-dependent: apfs-clone on macOS, copy elsewhere
+        const expectedCloneStrategy = process.platform === "darwin" ? "apfs-clone" : "copy";
+        expect(DEFAULT_CONFIG.browser.cloneStrategy).toBe(expectedCloneStrategy);
         expect(DEFAULT_CONFIG.browser.chatUrl).toBe("https://chatgpt.com/");
         expect(DEFAULT_CONFIG.browser.authUrl).toBe("https://chatgpt.com/auth/login");
         expect(DEFAULT_CONFIG.browser.runMode).toBe("headless");
         expect(Array.isArray(DEFAULT_CONFIG.browser.args)).toBe(true);
     });
+
 
     it("has auth config", () => {
         expect(DEFAULT_CONFIG.auth.pollMs).toBe(1000);

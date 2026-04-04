@@ -1,8 +1,9 @@
-import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, normalize } from "node:path";
 import { getAgentDir } from "@mariozechner/pi-coding-agent";
+import { resolveBrowserPath, detectBrowserVersion } from "./browser-detection";
+import { detectBrowserDataDir } from "./cookie-paths";
 
 export const MODEL_FAMILIES = ["instant", "thinking", "pro"] as const;
 export type OracleModelFamily = (typeof MODEL_FAMILIES)[number];
@@ -31,24 +32,6 @@ const PROJECT_OVERRIDE_KEYS = new Set([
 	"artifacts",
 	"cleanup",
 ]);
-const DEFAULT_MAC_CHROME_EXECUTABLE =
-	"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const DEFAULT_MAC_CHROME_USER_DATA_DIR = join(
-	homedir(),
-	"Library",
-	"Application Support",
-	"Google",
-	"Chrome",
-);
-const DEFAULT_MAC_BRAVE_EXECUTABLE =
-	"/Applications/Brave Browser.app/Contents/MacOS/Brave Browser";
-const DEFAULT_MAC_BRAVE_USER_DATA_DIR = join(
-	homedir(),
-	"Library",
-	"Application Support",
-	"BraveSoftware",
-	"Brave-Browser",
-);
 
 export interface OracleConfig {
 	defaults: {
@@ -93,68 +76,60 @@ export interface OracleConfig {
 		};
 }
 
+// =============================================================================
+// MULTIPLATFORM BROWSER DETECTION (delegates to browser-detection.ts)
+// =============================================================================
+
+/**
+ * Detect the default Chrome executable path on the current platform.
+ * Delegates to browser-detection.ts for multiplatform support.
+ */
 function detectDefaultChromeExecutablePath(): string | undefined {
-	return existsSync(DEFAULT_MAC_CHROME_EXECUTABLE)
-		? DEFAULT_MAC_CHROME_EXECUTABLE
+	const detected = resolveBrowserPath(undefined, "chrome");
+	return detected.source !== "fallback"
+		? detected.executablePath
 		: undefined;
 }
 
-function detectDefaultChromeUserAgent(
-	executablePath: string | undefined,
-): string | undefined {
-	if (!executablePath) return undefined;
-	try {
-		const versionOutput = execFileSync(executablePath, ["--version"], {
-			encoding: "utf8",
-		}).trim();
-		const versionMatch = versionOutput.match(/(\d+\.\d+\.\d+\.\d+)/);
-		if (!versionMatch) return undefined;
-		return `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${versionMatch[1]} Safari/537.36`;
-	} catch {
-		return undefined;
-	}
-}
-
-function detectDefaultChromeProfileName(): string {
-	const localStatePath = join(DEFAULT_MAC_CHROME_USER_DATA_DIR, "Local State");
-	if (!existsSync(localStatePath)) return "Default";
-	try {
-		const localState = JSON.parse(readFileSync(localStatePath, "utf8")) as {
-			profile?: { last_used?: string };
-		};
-		const lastUsed = localState?.profile?.last_used;
-		return typeof lastUsed === "string" && lastUsed.trim()
-			? lastUsed.trim()
-			: "Default";
-	} catch {
-		return "Default";
-	}
-}
-
+/**
+ * Detect the default Brave executable path on the current platform.
+ * Delegates to browser-detection.ts for multiplatform support.
+ */
 function detectDefaultBraveExecutablePath(): string | undefined {
-	return existsSync(DEFAULT_MAC_BRAVE_EXECUTABLE)
-		? DEFAULT_MAC_BRAVE_EXECUTABLE
+	const detected = resolveBrowserPath(undefined, "brave");
+	return detected.source !== "fallback"
+		? detected.executablePath
 		: undefined;
 }
 
-function detectDefaultBraveUserAgent(
-	executablePath: string | undefined,
-): string | undefined {
+/**
+ * Build a User-Agent string for the current platform based on a browser executable.
+ * Uses the platform-appropriate template (macOS/Linux/Windows).
+ */
+function detectDefaultUserAgent(executablePath: string | undefined): string | undefined {
 	if (!executablePath) return undefined;
 	try {
-		const versionOutput = execFileSync(executablePath, ["--version"], {
-			encoding: "utf8",
-		}).trim();
-		const versionMatch = versionOutput.match(/(\d+\.\d+\.\d+\.\d+)/);
-		if (!versionMatch) return undefined;
-		return `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${versionMatch[1]} Safari/537.36`;
+		const version = detectBrowserVersion(executablePath);
+		if (!version) return undefined;
+		const osPart = process.platform === "darwin"
+			? "Macintosh; Intel Mac OS X 10_15_7"
+			: process.platform === "win32"
+				? "Windows NT 10.0; Win64; x64"
+				: "X11; Linux x86_64";
+		return `Mozilla/5.0 (${osPart}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${version} Safari/537.36`;
 	} catch {
 		return undefined;
 	}
 }
 
-function detectDefaultBraveProfileName(): string {
-	const localStatePath = join(DEFAULT_MAC_BRAVE_USER_DATA_DIR, "Local State");
+/**
+ * Detect the default browser profile name by reading Local State.
+ * Uses cookie-paths to find the browser data directory on any platform.
+ */
+function detectDefaultBrowserProfileName(browser: "brave" | "chrome"): string {
+	const dataDir = detectBrowserDataDir(browser);
+	if (!dataDir) return "Default";
+	const localStatePath = join(dataDir, "Local State");
 	if (!existsSync(localStatePath)) return "Default";
 	try {
 		const localState = JSON.parse(readFileSync(localStatePath, "utf8")) as {
@@ -169,16 +144,24 @@ function detectDefaultBraveProfileName(): string {
 	}
 }
 
-const detectedChromeExecutablePath = detectDefaultChromeExecutablePath();
-const detectedChromeUserAgent = detectDefaultChromeUserAgent(
-	detectedChromeExecutablePath,
-);
-const detectedBraveExecutablePath = detectDefaultBraveExecutablePath();
-const detectedBraveUserAgent = detectDefaultBraveUserAgent(
-	detectedBraveExecutablePath,
-);
+// =============================================================================
+// DEFAULT CONFIG — computed at module load time
+// =============================================================================
+
+const browserResolution = resolveBrowserPath();
+const detectedExecutablePath = browserResolution.source !== "fallback"
+	? browserResolution.executablePath
+	: undefined;
+const detectedUserAgent = detectedExecutablePath
+	? detectDefaultUserAgent(detectedExecutablePath)
+	: undefined;
 const agentExtensionsDir = join(getAgentDir(), "extensions");
-const detectedChromeProfileName = detectDefaultChromeProfileName();
+const detectedProfileName = detectDefaultBrowserProfileName(
+	browserResolution.name === "brave" ? "brave" : "chrome",
+);
+
+/** Default clone strategy: apfs-clone only on macOS, copy everywhere else */
+const DEFAULT_CLONE_STRATEGY = process.platform === "darwin" ? "apfs-clone" : "copy";
 
 export const DEFAULT_CONFIG: OracleConfig = {
 	defaults: {
@@ -191,18 +174,18 @@ export const DEFAULT_CONFIG: OracleConfig = {
 		authSeedProfileDir: join(agentExtensionsDir, "oracle-auth-seed-profile"),
 		runtimeProfilesDir: join(agentExtensionsDir, "oracle-runtime-profiles"),
 		maxConcurrentJobs: 2,
-		cloneStrategy: "apfs-clone",
+		cloneStrategy: DEFAULT_CLONE_STRATEGY,
 		chatUrl: "https://chatgpt.com/",
 		authUrl: "https://chatgpt.com/auth/login",
 		runMode: "headless",
-		executablePath: detectedBraveExecutablePath || detectedChromeExecutablePath,
-		userAgent: detectedBraveUserAgent || detectedChromeUserAgent,
+		executablePath: detectedExecutablePath,
+		userAgent: detectedUserAgent,
 		args: ["--disable-blink-features=AutomationControlled"],
 	},
 	auth: {
 		pollMs: 1000,
 		bootstrapTimeoutMs: 10 * 60 * 1000,
-		chromeProfile: detectedChromeProfileName,
+		chromeProfile: detectedProfileName,
 		chromeCookiePath: undefined,
 	},
 	worker: {
@@ -220,6 +203,10 @@ export const DEFAULT_CONFIG: OracleConfig = {
 		failedJobRetentionMs: 30 * 24 * 60 * 60 * 1000,
 	},
 };
+
+// =============================================================================
+// CONFIG VALIDATION
+// =============================================================================
 
 function isObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -274,12 +261,14 @@ function expandHomePath(value: string): string {
 	return value;
 }
 
-function expectAbsoluteNormalizedPath(value: unknown, path: string): string {
-	const expanded = expandHomePath(expectString(value, path));
-	if (!isAbsolute(expanded)) {
-		throw new Error(`Invalid oracle config: ${path} must be an absolute path`);
+/** Known browser user-data directories used for profile safety checks */
+function getRealBrowserUserDirs(): string[] {
+	const dirs: string[] = [];
+	for (const browser of ["brave", "chrome", "edge"] as const) {
+		const dir = detectBrowserDataDir(browser);
+		if (dir) dirs.push(dir);
 	}
-	return normalize(expanded);
+	return dirs;
 }
 
 function expectSafeProfilePath(pathValue: string, path: string): string {
@@ -288,11 +277,11 @@ function expectSafeProfilePath(pathValue: string, path: string): string {
 			`Invalid oracle config: ${path} points to an unsafe directory`,
 		);
 	}
+	const realDirs = getRealBrowserUserDirs();
 	if (
-		pathValue === DEFAULT_MAC_CHROME_USER_DATA_DIR ||
-		pathValue.startsWith(`${DEFAULT_MAC_CHROME_USER_DATA_DIR}/`) ||
-		pathValue === DEFAULT_MAC_BRAVE_USER_DATA_DIR ||
-		pathValue.startsWith(`${DEFAULT_MAC_BRAVE_USER_DATA_DIR}/`)
+		realDirs.some(
+			(dir) => pathValue === dir || pathValue.startsWith(`${dir}/`)
+		)
 	) {
 		throw new Error(
 			`Invalid oracle config: ${path} must not point into the real browser user-data directory`,
@@ -383,12 +372,20 @@ function expectProviderUrl(value: unknown, path: string): string {
 		if (parsed.protocol !== "https:") {
 			throw new Error("unsupported protocol");
 		}
-		// Do not restrict to ChatGPT origins here; accept other https providers for extensibility
 		return parsed.toString();
 	} catch {
 		throw new Error(`Invalid oracle config: ${path} must be an https URL`);
 	}
 }
+
+function expectAbsoluteNormalizedPath(value: unknown, path: string): string {
+	const expanded = expandHomePath(expectString(value, path));
+	if (!isAbsolute(expanded)) {
+		throw new Error(`Invalid oracle config: ${path} must be an absolute path`);
+	}
+	return normalize(expanded);
+}
+
 function filterProjectConfig(value: unknown): unknown {
 	if (value === undefined) return undefined;
 	const root = expectObject(value, "project config root");
@@ -514,8 +511,8 @@ function validateOracleConfig(value: unknown): OracleConfig {
 				"browser.cloneStrategy",
 				CLONE_STRATEGIES,
 			),
-chatUrl: expectProviderUrl(browser.chatUrl, "browser.chatUrl"),
-authUrl: expectProviderUrl(browser.authUrl, "browser.authUrl"),
+			chatUrl: expectProviderUrl(browser.chatUrl, "browser.chatUrl"),
+			authUrl: expectProviderUrl(browser.authUrl, "browser.authUrl"),
 			runMode: expectEnum(
 				browser.runMode,
 				"browser.runMode",
