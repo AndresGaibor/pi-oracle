@@ -10,6 +10,7 @@ import { parseSnapshotEntries, findEntry, findLastEntry, labelMatches, type Pars
 import { buildLoginProbeScript, classifyChatPage, type LoginProbeResult, type ClassifyResult, type PageState } from "../shared/login-utils";
 import * as browser from "../lib/browser";
 import { AUTH_STEP_SETTLE_MS, AUTH_RETRY_POLL_MS } from "../lib/constants";
+import { detectBrowserDataDir } from "../lib/cookie-paths";
 
 // Extended probe result for auth-bootstrap with extra diagnostic fields
 interface AuthBootstrapProbeResult extends LoginProbeResult {
@@ -49,7 +50,16 @@ const URL_PATH = "/tmp/oracle-auth.url.txt";
 const SNAPSHOT_PATH = "/tmp/oracle-auth.snapshot.txt";
 const BODY_PATH = "/tmp/oracle-auth.body.txt";
 const SCREENSHOT_PATH = "/tmp/oracle-auth.png";
-const REAL_CHROME_USER_DATA_DIR = resolve(homedir(), "Library", "Application Support", "Google", "Chrome");
+const REAL_CHROME_USER_DATA_DIR = resolve(
+  process.platform === "darwin"
+    ? join(homedir(), "Library", "Application Support", "Google", "Chrome")
+    : process.platform === "win32"
+      ? join(
+          process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"),
+          "Google", "Chrome", "User Data",
+        )
+      : join(homedir(), ".config", "google-chrome"),
+);
 const ORACLE_STATE_DIR = "/tmp/pi-oracle-state";
 const LOCKS_DIR = join(ORACLE_STATE_DIR, "locks");
 
@@ -196,6 +206,14 @@ async function createProfilePlan(profileDir: string) {
     throw new Error(`Oracle profileDir is unsafe: ${targetDir}`);
   }
   if (targetDir === REAL_CHROME_USER_DATA_DIR || targetDir.startsWith(`${REAL_CHROME_USER_DATA_DIR}/`)) {
+    // Also check Brave data dir to prevent pointing into any real browser profile
+    const braveDataDir = detectBrowserDataDir("brave");
+    if (
+      braveDataDir &&
+      (targetDir === braveDataDir || targetDir.startsWith(`${braveDataDir}/`))
+    ) {
+      throw new Error(`Oracle profileDir must not point into the real browser user-data directory: ${targetDir}`);
+    }
     throw new Error(`Oracle profileDir must not point into the real Chrome user-data directory: ${targetDir}`);
   }
 
@@ -627,7 +645,8 @@ async function run() {
 
 run().catch((error: any) => {
   process.stderr.write(
-    `${error instanceof Error ? error.message : String(error)}\nSee ${LOG_PATH} and diagnostics in /tmp/oracle-auth.*\nIf needed, ensure the configured real Chrome profile is already logged into ChatGPT and grant macOS Keychain access when prompted.`,
+    `${error instanceof Error ? error.message : String(error)}\nSee ${LOG_PATH} and diagnostics in /tmp/oracle-auth.*\nIf needed, ensure the configured browser profile is already logged into ChatGPT.`,
   );
+
   process.exit(1);
 });

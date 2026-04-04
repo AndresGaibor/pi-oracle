@@ -10,14 +10,12 @@
 // ---------------------------------------------------------------------------
 
 import { readChatGPTCookies } from "../lib/cookies";
+import { getCookiePath } from "./cookie-paths";
 import * as browser from "../lib/browser";
-import { homedir } from "node:os";
-import { join } from "node:path";
 
-const BRAVE_PROFILE = join(
-	homedir(),
-	"Library/Application Support/BraveSoftware/Brave-Browser/Default"
-);
+
+const BRAVE_PROFILE = getCookiePath("brave", "Default") ?? "/tmp/oracle-fallback-profile";
+
 
 async function miWorkerConAuth() {
 	console.log("🍪 Reading ChatGPT cookies from Brave...");
@@ -120,7 +118,8 @@ async function miWorkerConErrorHandling() {
 				console.error(`   Path: ${BRAVE_PROFILE}`);
 			} else if (error.message.includes("EACCES")) {
 				console.error("❌ Permission denied reading cookies");
-				console.error("   May need macOS Keychain access");
+				console.error("   May need OS keychain/permission access");
+
 			} else {
 				console.error(`❌ Error: ${error.message}`);
 			}
@@ -174,11 +173,8 @@ interface WorkerConfig {
 
 async function miWorkerConConfig(config: WorkerConfig) {
 	const profilePath =
-		config.profilePath ||
-		join(
-			homedir(),
-			"Library/Application Support/BraveSoftware/Brave-Browser/Default"
-		);
+		config.profilePath || getCookiePath("brave", "Default") || "/tmp/oracle-fallback";
+
 
 	const chatUrl = config.chatUrl || "https://chatgpt.com/";
 

@@ -253,7 +253,8 @@ export function ensureAccountCookie(cookies: Cookie[], chatUrl: string): {
  * ```ts
  * const result = await readCookiesFromBrowser({
  *   url: "https://chatgpt.com/",
- *   profilePath: "/Users/x/Library/Application Support/BraveSoftware/Brave-Browser/Default"
+ *   profilePath: "<use cookie-paths or config to resolve>"
+
  * });
  * console.log(`Read ${result.cookies.length} cookies`);
  * ```
@@ -287,7 +288,8 @@ export async function readCookiesFromBrowser(
  * @example
  * ```ts
  * const result = await readChatGPTCookies({
- *   profilePath: "/Users/x/Library/Application Support/BraveSoftware/Brave-Browser/Default"
+ *   profilePath: "<use cookie-paths or config to resolve>"
+
  * });
  * 
  * if (result.hasSessionToken) {
