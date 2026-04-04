@@ -8,6 +8,19 @@ import { isResponseComplete, findArtifactCandidates, preferredArtifactName } fro
 import { buildLoginProbeScript, classifyChatPage, type LoginProbeResult, type ClassifyResult, type PageState } from "../shared/login-utils";
 import * as browser from "../lib/browser";
 import { CHATGPT_LABELS, MODEL_FAMILY_PREFIX, EFFORT_LABELS } from "../pages/chatgpt/chatgpt.selectors";
+import {
+  ARTIFACT_CANDIDATE_STABILITY_TIMEOUT_MS,
+  ARTIFACT_CANDIDATE_STABILITY_POLL_MS,
+  ARTIFACT_CANDIDATE_STABILITY_POLLS,
+  ARTIFACT_DOWNLOAD_HEARTBEAT_MS,
+  ARTIFACT_DOWNLOAD_TIMEOUT_MS,
+  ARTIFACT_DOWNLOAD_MAX_ATTEMPTS,
+  LOCK_RETRY_POLL_MS,
+  CHAT_URL_POLL_MS,
+  CONVERSATION_REOPEN_SETTLE_MS,
+  ARTIFACT_RETRY_SETTLE_MS,
+  LOCK_ACQUIRE_TIMEOUT_MS,
+} from "../lib/constants";
 
 const jobId = process.argv[2];
 if (!jobId) {
@@ -25,12 +38,7 @@ const ORACLE_STATE_DIR = "/tmp/pi-oracle-state";
 const LOCKS_DIR = join(ORACLE_STATE_DIR, "locks");
 const LEASES_DIR = join(ORACLE_STATE_DIR, "leases");
 const SEED_GENERATION_FILE = ".oracle-seed-generation";
-const ARTIFACT_CANDIDATE_STABILITY_TIMEOUT_MS = 15_000;
-const ARTIFACT_CANDIDATE_STABILITY_POLL_MS = 1_500;
-const ARTIFACT_CANDIDATE_STABILITY_POLLS = 2;
-const ARTIFACT_DOWNLOAD_HEARTBEAT_MS = 10_000;
-const ARTIFACT_DOWNLOAD_TIMEOUT_MS = 90_000;
-const ARTIFACT_DOWNLOAD_MAX_ATTEMPTS = 2;
+
 
 let currentJob: any;
 let browserStarted = false;
@@ -98,7 +106,7 @@ async function maybeReclaimStaleLock(path: string): Promise<boolean> {
   return true;
 }
 
-async function acquireLock(kind: string, key: string, metadata: any, timeoutMs = 30_000) {
+async function acquireLock(kind: string, key: string, metadata: any, timeoutMs = LOCK_ACQUIRE_TIMEOUT_MS) {
   const path = join(LOCKS_DIR, leaseKey(kind, key));
   const deadline = Date.now() + timeoutMs;
   await ensurePrivateDir(ORACLE_STATE_DIR);
@@ -113,7 +121,7 @@ async function acquireLock(kind: string, key: string, metadata: any, timeoutMs =
       if (!(error && typeof error === "object" && "code" in error && error.code === "EEXIST")) throw error;
       if (await maybeReclaimStaleLock(path)) continue;
     }
-    await sleep(200);
+    await sleep(LOCK_RETRY_POLL_MS);
   }
 
   throw new Error(`Timed out waiting for oracle ${kind} lock: ${key}`);
@@ -665,7 +673,7 @@ async function waitForStableChatUrl(job: any, previousChatUrl: string | undefine
       if (stableCount >= 2) return url;
     }
 
-    await sleep(1000);
+    await sleep(CHAT_URL_POLL_MS);
   }
 
   return previousChatUrl || stripQuery(await currentUrl(job));
@@ -755,7 +763,7 @@ async function reopenConversationForArtifacts(job: any, responseIndex: number, r
   const targetUrl = job.chatUrl || stripQuery(await currentUrl(job));
   await log(`Reopening conversation before artifact capture (${reason}): ${targetUrl}`);
   await browser.open(targetUrl);
-  await sleep(1500);
+  await sleep(CONVERSATION_REOPEN_SETTLE_MS);
   return waitForStableArtifactCandidates(job, responseIndex);
 }
 
@@ -856,7 +864,7 @@ async function downloadArtifacts(job: any, responseIndex: number) {
           artifacts.push({ displayName: candidate.label, unconfirmed: true, error: message });
         } else {
           await reopenConversationForArtifacts(job, responseIndex, `retry ${attempt + 1} for ${candidate.label}`);
-          await sleep(1_000);
+          await sleep(ARTIFACT_RETRY_SETTLE_MS);
         }
       } finally {
         await flushArtifactsState(artifacts);
