@@ -256,6 +256,7 @@ export function preferredArtifactName(label: string, index: number): string {
 	const normalized = String(label || "").trim();
 	const fileNameMatch = normalized.match(/([A-Za-z0-9._-]+\.[A-Za-z0-9]{1,12})(?!.*[A-Za-z0-9._-]+\.[A-Za-z0-9]{1,12})/);
 	if (fileNameMatch) return fileNameMatch[1].replace(/[^a-zA-Z0-9._-]/g, "_");
+	return `artifact-${String(index + 1).padStart(2, "0")}`;
 }
 
 // ---------------------------------------------------------------------------
