@@ -17,6 +17,7 @@ import type { BrowserActions } from "../pages/browser-actions.types";
 import * as browser from "../lib/browser";
 import { classifyChatPage, type LoginProbeResult, type ClassifyResult } from "../shared/login-utils";
 import { findEntry, findLastEntry } from "../shared/snapshot-utils";
+import { AUTH_STEP_SETTLE_MS, AUTH_RETRY_POLL_MS } from "./constants";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -186,7 +187,7 @@ async function acquireLock(kind: string, key: string, metadata: unknown, timeout
 			if (!(error && typeof error === "object" && "code" in error && error.code === "EEXIST")) throw error;
 			if (await maybeReclaimStaleLock(path)) continue;
 		}
-		await sleep(200);
+		await sleep(AUTH_RETRY_POLL_MS);
 	}
 	throw new Error(`Timed out waiting for oracle ${kind} lock: ${key}`);
 }
@@ -394,14 +395,14 @@ export class AuthBootstrap {
 					attemptedAuthUrl = true;
 					await log(`Opening auth URL ${this.config.browser.authUrl} to force session resolution`);
 					await browser.open(this.config.browser.authUrl);
-					await sleep(1500);
+					await sleep(AUTH_STEP_SETTLE_MS);
 					continue;
 				}
 				if (!attemptedAccountChooser && (probe?.bodyHasId || probe?.bodyHasEmail)) {
 					attemptedAccountChooser = await this.maybeSelectAccountIdentity(snapshot, probe);
 					if (attemptedAccountChooser) {
 						await log("Auth transition click dispatched; waiting for authenticated shell to settle");
-						await sleep(1500);
+						await sleep(AUTH_STEP_SETTLE_MS);
 						continue;
 					}
 				}
@@ -409,7 +410,7 @@ export class AuthBootstrap {
 					retriedAuthTransition = true;
 					await log("Auth looks accepted but page is still public-looking; reloading once");
 					await browser.reload();
-					await sleep(1500);
+					sleep(AUTH_STEP_SETTLE_MS).catch(() => undefined);
 					continue;
 				}
 				if (elapsedMs >= 20_000) {
@@ -424,7 +425,7 @@ export class AuthBootstrap {
 				retriedOutage = true;
 				await log("Transient outage detected; reloading once");
 				await browser.reload();
-				await sleep(1500);
+				sleep(AUTH_STEP_SETTLE_MS).catch(() => undefined);
 				continue;
 			}
 

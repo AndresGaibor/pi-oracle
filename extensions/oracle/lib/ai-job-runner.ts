@@ -1,5 +1,5 @@
 /**
- * ChatGPTJobRunner – orchestrates a single oracle job.
+ * AIJobRunner – orchestrates a single oracle job.
  * Encapsulates the workflow: launch browser → verify auth → upload archive →
  * send prompt → wait for response → download artifacts.
  *
@@ -48,6 +48,7 @@ import type { BrowserActions } from "../pages/browser-actions.types";
 import { CHATGPT_LABELS as DEFAULT_LABELS, MODEL_FAMILY_PREFIX, EFFORT_LABELS } from "../pages/chatgpt/chatgpt.selectors";
 import { parseSnapshotEntries, findEntry, findLastEntry, labelMatches, type ParsedSnapshotEntry } from "../shared/snapshot-utils";
 import { isResponseComplete, findArtifactCandidates, preferredArtifactName } from "../pages/chatgpt/chatgpt.assertions";
+import { CHAT_URL_POLL_MS, CHAT_URL_STABLE_COUNT, CONVERSATION_REOPEN_SETTLE_MS, ARTIFACT_RETRY_SETTLE_MS, ARTIFACT_CANDIDATE_STABILITY_TIMEOUT_MS, ARTIFACT_CANDIDATE_STABILITY_POLL_MS, ARTIFACT_CANDIDATE_STABILITY_POLLS, ARTIFACT_DOWNLOAD_HEARTBEAT_MS, ARTIFACT_DOWNLOAD_TIMEOUT_MS, ARTIFACT_DOWNLOAD_MAX_ATTEMPTS } from "./constants";
 // ---------------------------------------------------------------------------
 // Labels – single source of truth, shared with ChatGPTPage
 // ---------------------------------------------------------------------------
@@ -72,12 +73,8 @@ const LABELS = {
 	autoSwitchToThinking: ["Auto-switch to Thinking", "Cambio automático a Thinking", "Cambio automático a Pensando"],
 };
 
-const ARTIFACT_CANDIDATE_STABILITY_TIMEOUT_MS = 15_000;
-const ARTIFACT_CANDIDATE_STABILITY_POLL_MS = 1_500;
-const ARTIFACT_CANDIDATE_STABILITY_POLLS = 2;
-const ARTIFACT_DOWNLOAD_HEARTBEAT_MS = 10_000;
-const ARTIFACT_DOWNLOAD_TIMEOUT_MS = 90_000;
-const ARTIFACT_DOWNLOAD_MAX_ATTEMPTS = 2;
+
+
 
 // ---------------------------------------------------------------------------
 // Types
@@ -319,10 +316,10 @@ function sleep(ms: number): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// ChatGPTJobRunner
+// AIJobRunner
 // ---------------------------------------------------------------------------
 
-export class ChatGPTJobRunner {
+export class AIJobRunner {
 	private job: JobState;
 	private provider: AIProviderPage;
 	private logFn: (message: string) => Promise<void>;
@@ -420,9 +417,9 @@ export class ChatGPTJobRunner {
 				if (url === lastUrl) stableCount += 1;
 				else stableCount = 1;
 				lastUrl = url;
-				if (stableCount >= 2) return url;
+				if (stableCount >= CHAT_URL_STABLE_COUNT) return url;
 			}
-			await sleep(1000);
+			await sleep(CHAT_URL_POLL_MS);
 		}
 		return previousChatUrl || stripQuery(await browser.getUrl());
 	}
@@ -549,7 +546,7 @@ export class ChatGPTJobRunner {
 						artifacts.push({ displayName: candidate.label, unconfirmed: true, error: message } as unknown as ArtifactEntry);
 					} else {
 						await this.reopenConversationForArtifacts(responseIndex, `retry ${attempt + 1} for ${candidate.label}`);
-						await sleep(1_000);
+						await sleep(ARTIFACT_RETRY_SETTLE_MS);
 					}
 				} finally {
 					await this.flushArtifactsState(artifacts);
@@ -637,7 +634,7 @@ export class ChatGPTJobRunner {
 		const targetUrl = this.job.chatUrl || stripQuery(await browser.getUrl());
 		await this.logFn(`Reopening conversation before artifact capture (${reason}): ${targetUrl}`);
 		await browser.open(targetUrl);
-		await sleep(1500);
+		await sleep(CONVERSATION_REOPEN_SETTLE_MS);
 		return this.waitForStableArtifactCandidates(responseIndex);
 	}
 

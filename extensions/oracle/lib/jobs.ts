@@ -7,6 +7,7 @@ import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import type { OracleConfig, OracleEffort, OracleModelFamily } from "./config";
 import { withJobLock } from "./locks";
 import { cleanupRuntimeArtifacts, getProjectId, getSessionId, parseConversationId, type OracleCleanupReport } from "./runtime";
+import { PRUNE_SETTLE_MS, RECONCILE_POLL_MS } from "./constants";
 
 export type OracleJobStatus = "preparing" | "submitted" | "waiting" | "complete" | "failed" | "cancelled";
 export type OracleJobPhase =
@@ -50,7 +51,7 @@ async function waitForProcessStartedAt(pid: number | undefined, timeoutMs = 2_00
   while (Date.now() < deadline) {
     const startedAt = readProcessStartedAt(pid);
     if (startedAt) return startedAt;
-    await sleep(100);
+    await sleep(PRUNE_SETTLE_MS);
   }
   return readProcessStartedAt(pid);
 }
@@ -255,7 +256,7 @@ export async function terminateWorkerPid(
   const termDeadline = Date.now() + termGraceMs;
   while (Date.now() < termDeadline) {
     if (!isWorkerProcessAlive(pid, startedAt)) return true;
-    await sleep(250);
+    await sleep(RECONCILE_POLL_MS);
   }
 
   try {
@@ -267,7 +268,7 @@ export async function terminateWorkerPid(
   const killDeadline = Date.now() + killGraceMs;
   while (Date.now() < killDeadline) {
     if (!isWorkerProcessAlive(pid, startedAt)) return true;
-    await sleep(250);
+    await sleep(RECONCILE_POLL_MS);
   }
 
   return !isWorkerProcessAlive(pid, startedAt);
