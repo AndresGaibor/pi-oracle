@@ -61,9 +61,11 @@ export interface OracleConfig {
 		authSeedProfileDir: string;
 		runtimeProfilesDir: string;
 		maxConcurrentJobs: number;
-		cloneStrategy: OracleCloneStrategy;
+		cloneStrategy: string;
 		chatUrl: string;
 		authUrl: string;
+		/** Optional provider key (e.g. 'chatgpt', 'claude') */
+		aiProvider?: string;
 		runMode: OracleBrowserRunMode;
 		executablePath?: string;
 		userAgent?: string;
@@ -88,7 +90,7 @@ export interface OracleConfig {
 	cleanup: {
 		completeJobRetentionMs: number;
 		failedJobRetentionMs: number;
-	};
+		};
 }
 
 function detectDefaultChromeExecutablePath(): string | undefined {
@@ -374,24 +376,19 @@ function expectEnum<T extends readonly string[]>(
 	return value as T[number];
 }
 
-function expectChatGptUrl(value: unknown, path: string): string {
+function expectProviderUrl(value: unknown, path: string): string {
 	const url = expectString(value, path);
 	try {
 		const parsed = new URL(url);
-		if (
-			parsed.protocol !== "https:" ||
-			!ALLOWED_CHATGPT_ORIGINS.has(parsed.origin)
-		) {
-			throw new Error("unsupported origin");
+		if (parsed.protocol !== "https:") {
+			throw new Error("unsupported protocol");
 		}
+		// Do not restrict to ChatGPT origins here; accept other https providers for extensibility
 		return parsed.toString();
 	} catch {
-		throw new Error(
-			`Invalid oracle config: ${path} must be an https ChatGPT URL on ${Array.from(ALLOWED_CHATGPT_ORIGINS).join(", ")}`,
-		);
+		throw new Error(`Invalid oracle config: ${path} must be an https URL`);
 	}
 }
-
 function filterProjectConfig(value: unknown): unknown {
 	if (value === undefined) return undefined;
 	const root = expectObject(value, "project config root");
@@ -517,8 +514,8 @@ function validateOracleConfig(value: unknown): OracleConfig {
 				"browser.cloneStrategy",
 				CLONE_STRATEGIES,
 			),
-			chatUrl: expectChatGptUrl(browser.chatUrl, "browser.chatUrl"),
-			authUrl: expectChatGptUrl(browser.authUrl, "browser.authUrl"),
+chatUrl: expectProviderUrl(browser.chatUrl, "browser.chatUrl"),
+authUrl: expectProviderUrl(browser.authUrl, "browser.authUrl"),
 			runMode: expectEnum(
 				browser.runMode,
 				"browser.runMode",
