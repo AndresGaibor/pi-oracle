@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { appendFile, chmod, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { spawn } from "node:child_process";
-import { parseSnapshotEntries, findEntry, findLastEntry, type ParsedSnapshotEntry } from "../shared/snapshot-utils";
+import { parseSnapshotEntries, findEntry, findLastEntry, labelMatches, type ParsedSnapshotEntry } from "../shared/snapshot-utils";
 import { isResponseComplete, findArtifactCandidates } from "../pages/chatgpt/chatgpt.assertions";
 import { buildLoginProbeScript, classifyChatPage, type LoginProbeResult, type ClassifyResult, type PageState } from "../shared/login-utils";
 import * as browser from "../lib/browser";
@@ -38,11 +38,7 @@ let cleaningUpBrowser = false;
 let cleaningUpRuntime = false;
 let shuttingDown = false;
 let lastHeartbeatMs = 0;
-let pageToken: string | null = null;
 
-function labelMatches(label: any, candidates: readonly string[]): boolean {
-  return typeof label === "string" && (candidates as readonly string[]).includes(label);
-}
 
 function snapshotHasLabel(snapshot: string, kind: string, labels: readonly string[]): boolean {
   return labels.some((label) => snapshot.includes(`${kind} "${label}"`));

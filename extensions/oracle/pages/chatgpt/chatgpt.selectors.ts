@@ -229,8 +229,4 @@ export const EFFORT_LABELS: Record<string, readonly string[]> = {
 // Helper: check if a label matches any candidate
 // ---------------------------------------------------------------------------
 
-export function labelMatches(actual: string | undefined, candidates: readonly string[]): boolean {
-	if (!actual) return false;
-	const normalized = actual.toLowerCase().trim();
-	return candidates.some((c) => normalized.includes(c.toLowerCase()));
-}
+export { labelMatches } from "../../shared/snapshot-utils";

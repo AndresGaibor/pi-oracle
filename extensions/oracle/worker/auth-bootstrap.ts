@@ -6,7 +6,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { getCookies } from "@steipete/sweet-cookie";
 import { ensureAccountCookie, filterImportableAuthCookies } from "./auth-cookie-policy";
-import { parseSnapshotEntries, findEntry, findLastEntry, type ParsedSnapshotEntry } from "../shared/snapshot-utils";
+import { parseSnapshotEntries, findEntry, findLastEntry, labelMatches, type ParsedSnapshotEntry } from "../shared/snapshot-utils";
 import { buildLoginProbeScript, classifyChatPage, type LoginProbeResult, type ClassifyResult, type PageState } from "../shared/login-utils";
 import * as browser from "../lib/browser";
 
@@ -29,9 +29,6 @@ const CHATGPT_LABELS = {
   modelSelector: ["Model selector", "Selector de modelo"],
 };
 
-function labelMatches(label: any, candidates: string[]) {
-  return typeof label === "string" && candidates.includes(label);
-}
 
 function snapshotHasLabel(snapshot: string, kind: string, labels: string[]) {
   return labels.some((label) => snapshot.includes(`${kind} "${label}"`));

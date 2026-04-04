@@ -46,7 +46,7 @@ import * as browser from "../lib/browser";
 import type { AIProviderPage } from "../pages/ai-provider.types";
 import type { BrowserActions } from "../pages/browser-actions.types";
 import { CHATGPT_LABELS as DEFAULT_LABELS, MODEL_FAMILY_PREFIX, EFFORT_LABELS } from "../pages/chatgpt/chatgpt.selectors";
-import { parseSnapshotEntries, findEntry, findLastEntry, type ParsedSnapshotEntry } from "../shared/snapshot-utils";
+import { parseSnapshotEntries, findEntry, findLastEntry, labelMatches, type ParsedSnapshotEntry } from "../shared/snapshot-utils";
 import { isResponseComplete, findArtifactCandidates } from "../pages/chatgpt/chatgpt.assertions";
 // ---------------------------------------------------------------------------
 // Labels – single source of truth, shared with ChatGPTPage
@@ -163,9 +163,6 @@ const browserActions: BrowserActions = {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function labelMatches(label: unknown, candidates: string[]): boolean {
-	return typeof label === "string" && candidates.includes(label);
-}
 
 function effortLabelsFor(effortLabel: string): string[] {
 	if (!effortLabel) return [];
