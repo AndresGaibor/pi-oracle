@@ -11,3 +11,5 @@ adapter-tests/tmp-profile/
 dist/
 .ant-colony/
 .auth/
+coverage/
+test-results/
