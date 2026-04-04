@@ -301,6 +301,18 @@ export async function fill(refOrToken: string, text: string, pageIdHint?: string
 	await page.fill(selector, text);
 }
 
+/** Type text into a focused element (like contenteditable) */
+export async function type(text: string, pageId?: string): Promise<void> {
+	const page = resolvePage(pageId || ensureMainPage());
+	await page.keyboard.type(text);
+}
+
+/** Press a keyboard key */
+export async function press(key: string, pageId?: string): Promise<void> {
+	const page = resolvePage(pageId || ensureMainPage());
+	await page.keyboard.press(key);
+}
+
 export async function upload(refOrToken: string, filePath: string, pageIdHint?: string): Promise<void> {
 	const { page, selector } = resolveRef(refOrToken, pageIdHint);
 	await page.waitForSelector(selector, { state: "attached", timeout: 3000 }).catch(() => null);
