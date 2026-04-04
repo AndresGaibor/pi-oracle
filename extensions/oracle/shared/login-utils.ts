@@ -1,170 +1,101 @@
+import { CHATGPT_LABELS } from "../pages/chatgpt/chatgpt.selectors";
 // shared/login-utils.ts - Login and session utilities (extracted from workers)
 
-import { CHATGPT_LABELS } from "../pages/chatgpt/chatgpt.selectors";
-import type { LoginProbeConfig } from "./login-probe-types";
-
-// =============================================================================
-// TIPOS DE CONFIGURACIÓN DE LOGIN PROBE
-// =============================================================================
-
 /**
- * Configuración para el probe de login de diferentes proveedores de IA.
+ * Build the login probe script that checks session via /backend-api/me
  */
-export interface LoginProbeConfig {
-	/** URL base del proveedor (ej: "https://chatgpt.com", "https://claude.ai") */
-	baseUrl: string;
-	/** Endpoint de verificación de sesión (ej: "/backend-api/me", "/api/v1/session") */
-	sessionEndpoint?: string;
-	/** Headers adicionales para la request */
-	headers?: Record<string, string>;
-	/** Patrones para detectar página de autenticación (hostname y path patterns) */
-	authHostnamePatterns?: string[];
-	authPathPatterns?: string[];
-	/** Patrones para detectar CTA de login en texto */
-	loginCtaPatterns?: string[];
-}
-
-// Configuración por defecto para ChatGPT (mantiene compatibilidad)
-export const DEFAULT_CHATGPT_LOGIN_PROBE_CONFIG: LoginProbeConfig = {
-	baseUrl: "https://chatgpt.com",
-	sessionEndpoint: "/backend-api/me",
-	authHostnamePatterns: ["^auth\\.openai\\.com$"],
-	authPathPatterns: [
-		"^\\/(auth|login|signin|log-in)",
-		"^\\/(accounts|session)/",
-	],
-	loginCtaPatterns: [
-		"log in",
-		"login",
-		"sign in",
-		"signin",
-		"continue with",
-		"log in with",
-		"sign in with",
-	],
-};
-
-// =============================================================================
-// FUNCIÓN GENERALIZADA DE CONSTRUCCIÓN DE SCRIPT
-// =============================================================================
-
-/**
- * Construye el script de probe de login genérico para cualquier proveedor de IA.
- * @param config - Configuración específica del proveedor
- * @param timeoutMs - Timeout en milisegundos para la petición
- */
-export function buildLoginProbeScript(config: LoginProbeConfig, timeoutMs: number): string {
-	const sessionEndpoint = config.sessionEndpoint || "/api/auth/session";
-	const sessionUrl = `${config.baseUrl}${sessionEndpoint}`;
-	
-	// Construir patrones de detección de página de auth
-	const hostnamePatterns = config.authHostnamePatterns || DEFAULT_CHATGPT_LOGIN_PROBE_CONFIG.authHostnamePatterns;
-	const pathPatterns = config.authPathPatterns || DEFAULT_CHATGPT_LOGIN_PROBE_CONFIG.authPathPatterns;
-	
-	// Construir regex combinado para hostname
-	const hostnameRegex = hostnamePatterns.map(p => `(${p})`).join("|");
-	
-	// Construir regex combinado para path
-	const pathRegex = pathPatterns.map(p => `(${p})`).join("|");
-	
+export function buildLoginProbeScript(timeoutMs: number): string {
 	return toAsyncJsonScript(`
-		const pageUrl = typeof location === 'object' && location?.href ? location.href : null;
-		const onAuthPage =
-		  typeof location === 'object' &&
-		  ((typeof location.hostname === 'string' && new RegExp("${hostnameRegex}").test(location.hostname)) ||
-		   (typeof location.pathname === 'string' && new RegExp("${pathRegex}").test(location.pathname)));
+    const pageUrl = typeof location === 'object' && location?.href ? location.href : null;
+    const onAuthPage =
+      typeof location === 'object' &&
+      ((typeof location.hostname === 'string' && /^auth\\.openai\\.com$/i.test(location.hostname)) ||
+        (typeof location.pathname === 'string' && /^\\/(auth|login|signin|log-in)/i.test(location.pathname)));
 
-		const hasLoginCta = () => {
-		  const candidates = Array.from(
-			document.querySelectorAll(
-			  '${Array.from(new Set([
-				'a[href*="/auth/login"]',
-				'a[href*="/auth/signin"]',
-				'button[type="submit"]',
-				'button[data-testid*="login"]',
-				'button[data-testid*="log-in"]',
-				'button[data-testid*="sign-in"]',
-				'button[data-testid*="signin"]',
-				'button',
-				'a'
-			  ]).join(',')}'
-			)
-		  );
-		  
-		  const textMatches = (text) => {
-			if (!text) return false;
-			const normalized = text.toLowerCase().trim();
-			return (config.loginCtaPatterns || DEFAULT_CHATGPT_LOGIN_PROBE_CONFIG.loginCtaPatterns).some((needle) => normalized.startsWith(needle));
-		  };
-		  
-		  for (const node of candidates) {
-			if (!(node instanceof HTMLElement)) continue;
-			const label =
-			  node.textContent?.trim() ||
-			  node.getAttribute('aria-label') ||
-			  node.getAttribute('title') ||
-			  '';
-			if (textMatches(label)) return true;
-		  }
-		  return false;
-		};
+    const hasLoginCta = () => {
+      const candidates = Array.from(
+        document.querySelectorAll(
+          [
+            'a[href*="/auth/login"]',
+            'a[href*="/auth/signin"]',
+            'button[type="submit"]',
+            'button[data-testid*="login"]',
+            'button[data-testid*="log-in"]',
+            'button[data-testid*="sign-in"]',
+            'button[data-testid*="signin"]',
+            'button',
+            'a',
+          ].join(','),
+        ),
+      );
+      const textMatches = (text) => {
+        if (!text) return false;
+        const normalized = text.toLowerCase().trim();
+        return ['log in', 'login', 'sign in', 'signin', 'continue with'].some((needle) => normalized.startsWith(needle));
+      };
+      for (const node of candidates) {
+        if (!(node instanceof HTMLElement)) continue;
+        const label =
+          node.textContent?.trim() ||
+          node.getAttribute('aria-label') ||
+          node.getAttribute('title') ||
+          '';
+        if (textMatches(label)) return true;
+      }
+      return false;
+    };
 
-		let status = 0;
-		let error = null;
-		let bodyKeys = [];
-		let bodyHasId = false;
-		let bodyHasEmail = false;
-		try {
-		  if (typeof fetch === 'function') {
-			const controller = new AbortController();
-			const timeout = setTimeout(() => controller.abort(), ${timeoutMs});
-			try {
-			  const response = await fetch(sessionUrl, {
-				cache: 'no-store',
-				credentials: 'include',
-				headers: config.headers,
-				signal: controller.signal,
-			  });
-			  status = response.status || 0;
-			  const contentType = response.headers.get('content-type') || '';
-			  if (contentType.includes('application/json')) {
-				const data = await response.clone().json().catch(() => null);
-				if (data && typeof data === 'object' && !Array.isArray(data)) {
-				  bodyKeys = Object.keys(data).slice(0, 12);
-				  bodyHasId = typeof data.id === 'string' && data.id.length > 0;
-				  bodyHasEmail = typeof data.email === 'string' && data.email.includes('@');
-				}
-			  }
-			} finally {
-			  clearTimeout(timeout);
-			}
-		  }
-		} catch (err) {
-		  error = err ? String(err) : 'unknown';
-		}
+    let status = 0;
+    let error = null;
+    let bodyKeys = [];
+    let bodyHasId = false;
+    let bodyHasEmail = false;
+    try {
+      if (typeof fetch === 'function') {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), ${timeoutMs});
+        try {
+          const response = await fetch('/backend-api/me', {
+            cache: 'no-store',
+            credentials: 'include',
+            signal: controller.signal,
+          });
+          status = response.status || 0;
+          const contentType = response.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const data = await response.clone().json().catch(() => null);
+            if (data && typeof data === 'object' && !Array.isArray(data)) {
+              bodyKeys = Object.keys(data).slice(0, 12);
+              bodyHasId = typeof data.id === 'string' && data.id.length > 0;
+              bodyHasEmail = typeof data.email === 'string' && data.email.includes('@');
+            }
+          }
+        } finally {
+          clearTimeout(timeout);
+        }
+      }
+    } catch (err) {
+      error = err ? String(err) : 'unknown';
+    }
 
-		const domLoginCta = hasLoginCta();
-		const loginSignals = domLoginCta || onAuthPage;
-		return {
-		  ok: !loginSignals && (status === 0 || status === 200),
-		  status,
-		  pageUrl,
-		  domLoginCta,
-		  onAuthPage,
-		  error,
-		  bodyKeys,
-		  bodyHasId,
-		  bodyHasEmail,
-		};
-	  `);
+    const domLoginCta = hasLoginCta();
+    const loginSignals = domLoginCta || onAuthPage;
+    return {
+      ok: !loginSignals && (status === 0 || status === 200),
+      status,
+      pageUrl,
+      domLoginCta,
+      onAuthPage,
+      error,
+      bodyKeys,
+      bodyHasId,
+      bodyHasEmail,
+    };
+  `);
 }
 
-// =============================================================================
-// TIPOS DE RESULTADO
-// =============================================================================
-
 /**
- * Tipo de resultado para loginProbe
+ * Result type for loginProbe
  */
 export interface LoginProbeResult {
 	ok: boolean;
@@ -179,16 +110,12 @@ export interface LoginProbeResult {
 }
 
 /**
- * Ejecuta el probe de login y devuelve el resultado estructurado
- * @param config - Configuración del proveedor (opcional, usa ChatGPT por defecto)
- * @param evaluateFn - Función para evaluar scripts en el contexto de la página
+ * Run the login probe and return structured result
  */
 export async function loginProbe(
 	evaluateFn: (script: string) => Promise<string>,
-	config: LoginProbeConfig = DEFAULT_CHATGPT_LOGIN_PROBE_CONFIG,
 ): Promise<LoginProbeResult> {
-	const script = buildLoginProbeScript(config, 5_000);
-	const result = await evaluateFn(script);
+	const result = await evaluateFn(buildLoginProbeScript(5_000));
 
 	if (!result || typeof result !== "object") {
 		return {
@@ -216,24 +143,6 @@ export async function loginProbe(
 		bodyHasEmail: r.bodyHasEmail === true,
 	};
 }
-
-// =============================================================================
-// WRAPPER ESPECÍFICO PARA CHATGPT (MANTIENE COMPATIBILIDAD)
-// =============================================================================
-
-/**
- * Wrapper para el probe de login específico de ChatGPT.
- * Mantiene la interfaz original para no romper código existente.
- */
-export async function chatGPTLoginProbe(
-	evaluateFn: (script: string) => Promise<string>,
-): Promise<LoginProbeResult> {
-	return loginProbe(evaluateFn, DEFAULT_CHATGPT_LOGIN_PROBE_CONFIG);
-}
-
-// =============================================================================
-// FUNCIÓN ORIGINAL DE CLASIFICACIÓN (MANTENIDA POR COMPATIBILIDAD)
-// =============================================================================
 
 /**
  * Classify the ChatGPT page state
@@ -273,7 +182,6 @@ export function classifyChatPage(params: {
 		/unusual activity detected/i,
 		/we detect suspicious activity/i,
 	];
-
 	if (challengePatterns.some((pattern) => pattern.test(text))) {
 		return {
 			state: "challenge_blocking",
@@ -288,7 +196,7 @@ export function classifyChatPage(params: {
 		/an error occurred while connecting to the websocket/i,
 		/try again later/i,
 		/rate limit/i,
-		/mj:	];
+	];
 	if (outagePatterns.some((pattern) => pattern.test(text))) {
 		return {
 			state: "transient_outage_error",
@@ -362,8 +270,6 @@ export function classifyChatPage(params: {
 
 	return { state: "unknown", message: "Unable to determine page state" };
 }
-
-// Helper functions (moved from the end to keep them together)
 function snapshotHasLabel(
 	snapshot: string,
 	kind: string,
@@ -381,4 +287,8 @@ function snapshotHasLabel(
 		}
 	}
 	return false;
+}
+
+function toAsyncJsonScript(expression: string): string {
+	return `(async () => JSON.stringify(await (async () => { ${expression} })(), null, 2))()`;
 }
