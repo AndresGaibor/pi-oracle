@@ -1,22 +1,16 @@
 /**
- * Read cookies directly from Brave's SQLite database (encrypted).
- * Then decrypt using macOS Keychain.
+ * Read cookies directly from Brave's SQLite database.
+ * Then decrypt using OS keychain (macOS Keychain / Linux libsecret / Windows DPAPI).
  *
  * Usage:
  *   bun run scripts/read-cookies-direct.ts
  */
 import { existsSync, readdirSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
+import { detectBrowserDataDir } from "../extensions/oracle/lib/cookie-paths";
 
-const BRAVE_BASE = join(
-	homedir(),
-	"Library",
-	"Application Support",
-	"BraveSoftware",
-	"Brave-Browser",
-);
+const BRAVE_BASE = detectBrowserDataDir("brave");
 
 async function main() {
 	console.log("🔍 Reading cookies directly from Brave SQLite database\n");
