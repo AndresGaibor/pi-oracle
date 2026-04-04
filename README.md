@@ -65,10 +65,10 @@ Not promised yet:
 ## Requirements
 
 - macOS
-- Google Chrome installed
+- Google Chrome or Brave Browser installed
 - ChatGPT already signed into a local Chrome profile
 - `pi` installed
-- `agent-browser` available on the machine
+- `playwright` browsers installed (`bunx playwright install`)
 - `tar` and `zstd` available
 
 ## Install

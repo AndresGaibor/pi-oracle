@@ -3,8 +3,8 @@ import type {
 	ExtensionAPI,
 	ExtensionCommandContext,
 } from "@mariozechner/pi-coding-agent";
-import { loadOracleConfig } from "./config.js";
-import { buildOracleDispatchPrompt } from "./instructions.js";
+import { loadOracleConfig } from "./config";
+import { buildOracleDispatchPrompt } from "./instructions";
 import {
 	cancelOracleJob,
 	isActiveOracleJob,
@@ -13,10 +13,10 @@ import {
 	readJob,
 	reconcileStaleOracleJobs,
 	removeTerminalOracleJob,
-} from "./jobs.js";
-import { isLockTimeoutError, withGlobalReconcileLock } from "./locks.js";
-import { refreshOracleStatus } from "./poller.js";
-import { getProjectId } from "./runtime.js";
+} from "./jobs";
+import { isLockTimeoutError, withGlobalReconcileLock } from "./locks";
+import { refreshOracleStatus } from "./poller";
+import { getProjectId } from "./runtime";
 
 function summarizeJob(jobId: string): string {
 	const job = readJob(jobId);

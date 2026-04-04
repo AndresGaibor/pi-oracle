@@ -6,7 +6,15 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { getCookies } from "@steipete/sweet-cookie";
 import { ensureAccountCookie, filterImportableAuthCookies } from "./auth-cookie-policy";
-import adapter from "../../../adapter/playwright-adapter";
+import { parseSnapshotEntries, findEntry, findLastEntry, type ParsedSnapshotEntry } from "../shared/snapshot-utils";
+import { buildLoginProbeScript, classifyChatPage, type LoginProbeResult, type ClassifyResult, type PageState } from "../shared/login-utils";
+import * as browser from "../lib/browser";
+
+// Extended probe result for auth-bootstrap with extra diagnostic fields
+interface AuthBootstrapProbeResult extends LoginProbeResult {
+  name?: string;
+  responsePreview?: string;
+}
 
 const rawConfig = process.argv[2];
 if (!rawConfig) {
@@ -161,32 +169,12 @@ function spawnCommand(command: string, args: string[], options: any = {}) {
   });
 }
 
-function targetBrowserBaseArgs(options: any = {}) {
-  const args = ["--session", authSessionName()];
-  if (options.withLaunchOptions) {
-    args.push("--profile", runtimeProfileDir);
-    if (config.browser.executablePath) args.push("--executable-path", config.browser.executablePath);
-    if (config.browser.userAgent) args.push("--user-agent", config.browser.userAgent);
-    if (Array.isArray(config.browser.args) && config.browser.args.length > 0) args.push("--args", config.browser.args.join(","));
-    if (options.mode === "headed") args.push("--headed");
-  }
-  return args;
-}
-
 async function closeTargetBrowser() {
   await log(`Closing target browser session ${authSessionName()} if present`);
-  if (process.env.USE_PLAYWRIGHT === "1") {
-    try {
-      await adapter.close();
-      await log("Closed playwright adapter context");
-      return;
-    } catch (err) {
-      await log(`close adapter error: ${err instanceof Error ? err.message : String(err)}`);
-      return;
-    }
-  }
-  const result = await spawnCommand("agent-browser", [...targetBrowserBaseArgs(), "close"], { allowFailure: true }).catch((e) => ({ code: 1, stdout: "", stderr: String(e) }));
-  await log(`close result: code=${result.code} stdout=${JSON.stringify(result.stdout)} stderr=${JSON.stringify(result.stderr)}`);
+  await browser.close().catch((e) => {
+    void e;
+  });
+  await log("close result: browser closed");
 }
 
 async function ensureNotSymlink(path: string, label: string) {
@@ -255,208 +243,72 @@ async function commitStagedProfile(plan: any) {
 
 async function launchTargetBrowser() {
   await closeTargetBrowser();
-  if (process.env.USE_PLAYWRIGHT === "1") {
-    await log(`Launching playwright persistent context with profile ${runtimeProfileDir}`);
-    await adapter.launchPersistent(
-      runtimeProfileDir,
-      config.browser.executablePath,
-      config.browser.args,
-      config.browser.userAgent,
-    ).catch((e) => {
-      throw e;
-    });
-    await log("Playwright persistent context launched");
-    return;
-  }
-  const args = [...targetBrowserBaseArgs({ withLaunchOptions: true, mode: "headed" }), "open", "about:blank"];
-  await log(`Launching isolated browser: agent-browser ${JSON.stringify(args)}`);
-  const result = await spawnCommand("agent-browser", args, { allowFailure: true });
-  await log(`launch result: code=${result.code} stdout=${JSON.stringify(result.stdout)} stderr=${JSON.stringify(result.stderr)}`);
-  if (result.code !== 0) {
-    throw new Error(result.stderr || result.stdout || "Failed to launch isolated oracle browser");
-  }
+  const headless = false; // auth always runs headed for user interaction
+  await browser.launch({
+    userDataDir: runtimeProfileDir,
+    executablePath: config.browser.executablePath,
+    userAgent: config.browser.userAgent,
+    args: Array.isArray(config.browser.args) ? config.browser.args : undefined,
+    headless,
+  });
+  await log("Launching isolated browser: Playwright persistent context launched");
 }
 
-async function streamStatus() {
-  if (process.env.USE_PLAYWRIGHT === "1") {
-    // simple presence check
-    return { connected: true };
-  }
-  const result = await spawnCommand("agent-browser", [...targetBrowserBaseArgs(), "--json", "stream", "status"], { allowFailure: true });
-  await log(`stream status: code=${result.code} stdout=${JSON.stringify(result.stdout)} stderr=${JSON.stringify(result.stderr)}`);
-  try {
-    const parsed = JSON.parse(result.stdout || "{}");
-    return parsed?.data || {};
-  } catch {
-    return {};
-  }
+function streamStatus() {
+  return browser.getStatus();
 }
 
 async function ensureBrowserConnected() {
-  const status = await streamStatus();
+  const status = streamStatus();
   if (status.connected === false) {
     throw new Error("The isolated oracle browser was closed before auth verification completed.");
   }
 }
 
-async function targetCommand(...args: any[]) {
-  let options: any;
-  const maybeOptions = args.at(-1);
-  if (
-    maybeOptions &&
-    typeof maybeOptions === "object" &&
-    !Array.isArray(maybeOptions) &&
-    (Object.hasOwn(maybeOptions, "allowFailure") || Object.hasOwn(maybeOptions, "input") || Object.hasOwn(maybeOptions, "cwd") || Object.hasOwn(maybeOptions, "logLabel"))
-  ) {
-    options = args.pop();
-  }
-
-  if (process.env.USE_PLAYWRIGHT === "1") {
-    // map some common agent-browser commands to adapter functions
-    const cmd = args[0];
+function parseEvalResult(value: any) {
+  if (value === undefined) return undefined;
+  if (typeof value === "string") {
+    let trimmed = value.trim();
     try {
-      if (cmd === "open") {
-        const url = args[1];
-        const pageToken = await adapter.open(url);
-        return { code: 0, stdout: "", stderr: "", pageToken };
-      }
-      if (cmd === "get" && args[1] === "url") {
-        const url = await adapter.getUrl();
-        return { code: 0, stdout: String(url), stderr: "" };
-      }
-      if (cmd === "snapshot") {
-        const pageToken = args.includes("-i") ? (await adapter.open()) : (await adapter.open());
-        const snap = await adapter.snapshotText(pageToken as string);
-        return { code: 0, stdout: snap, stderr: "" };
-      }
-      if (cmd === "cookies" && args[1] === "clear") {
-        await adapter.cookiesClear();
-        return { code: 0, stdout: "", stderr: "" };
-      }
-      if (cmd === "cookies" && args[1] === "set") {
-        // called as: cookies set name value --domain domain --path path [--httpOnly] [--secure] [--sameSite s] [--expires n]
-        // convert args to cookie
-        const [, , name, value, ...rest] = args;
-        const cookie: any = { name, value, path: "/", httpOnly: false, secure: true };
-        for (let i = 0; i < rest.length; i++) {
-          const a = rest[i];
-          if (a === "--domain") cookie.domain = rest[++i];
-          else if (a === "--path") cookie.path = rest[++i];
-          else if (a === "--httpOnly") cookie.httpOnly = true;
-          else if (a === "--secure") cookie.secure = true;
-          else if (a === "--sameSite") cookie.sameSite = rest[++i];
-          else if (a === "--expires") cookie.expires = Number(rest[++i]);
-        }
-        await adapter.cookiesSet([cookie]);
-        return { code: 0, stdout: "", stderr: "" };
-      }
-      if (cmd === "eval" && args.includes("--stdin")) {
-        const script = options?.input ?? "";
-        const pageToken = await adapter.open();
-        const evalRes = await adapter.evaluate(pageToken as string, script);
-        return { code: 0, stdout: String(typeof evalRes === "string" ? evalRes : JSON.stringify(evalRes)), stderr: "" };
-      }
-      if (cmd === "get" && args[1] === "text" && args[2] === "body") {
-        const text = await adapter.pageText();
-        return { code: 0, stdout: String(text), stderr: "" };
-      }
-      if (cmd === "screenshot") {
-        const dest = args[1];
-        await adapter.screenshot(dest);
-        return { code: 0, stdout: "", stderr: "" };
-      }
-
-      // fallback
-      return { code: 0, stdout: "", stderr: "" };
-    } catch (err: any) {
-      if (options?.allowFailure) return { code: 1, stdout: "", stderr: String(err) };
-      throw err;
+      let parsed = JSON.parse(trimmed);
+      while (typeof parsed === "string") parsed = JSON.parse(parsed);
+      return parsed;
+    } catch {
+      return trimmed;
     }
   }
-
-  await ensureBrowserConnected();
-  const result = await spawnCommand("agent-browser", [...targetBrowserBaseArgs(), ...args], options);
-  const label = options?.logLabel || `agent-browser ${args.join(" ")}`;
-  await log(`${label}: code=${result.code} stdout=${JSON.stringify(result.stdout)} stderr=${JSON.stringify(result.stderr)}`);
-  return result;
+  return value;
 }
 
-function parseEvalResult(stdout: string) {
-  if (!stdout) return undefined;
-  let value = stdout.trim();
-  try {
-    let parsed = JSON.parse(value);
-    while (typeof parsed === "string") parsed = JSON.parse(parsed);
-    return parsed;
-  } catch {
-    return value;
-  }
+async function evalPage(script: string, _logLabel = "eval") {
+  const raw = await browser.evaluate(browser.getMainPageId(), script);
+  if (typeof raw === "string") return parseEvalResult(raw);
+  return raw;
 }
 
-async function evalPage(script: string, logLabel = "eval") {
-  const result = await targetCommand("eval", "--stdin", { input: script, logLabel });
-  return parseEvalResult(result.stdout);
-}
-
-function toAsyncJsonScript(expression: string) {
-  return `(async () => JSON.stringify(await (async () => { ${expression} })(), null, 2))()`;
-}
-
-async function openUrl(url: string, label = url) {
+async function openUrl(url: string, _label = url) {
   await log(`Opening URL ${url}`);
-  await targetCommand("open", url, { logLabel: `open ${label}` });
+  await browser.open(url);
 }
 
 async function getUrl() {
-  const { stdout } = await targetCommand("get", "url", { logLabel: "get url" });
-  return stdout || "";
+  return browser.getUrl();
 }
 
-async function snapshotText() {
-  const { stdout } = await targetCommand("snapshot", "-i", { logLabel: "snapshot -i" });
-  return stdout || "";
+async function snapshotText(): Promise<string> {
+  return browser.snapshotText();
 }
 
-async function pageText() {
-  const { stdout } = await targetCommand("get", "text", "body", { allowFailure: true, logLabel: "get text body" });
-  return stdout || "";
+async function pageText(): Promise<string> {
+  return browser.pageText();
 }
 
-function parseSnapshotEntries(snapshot: string) {
-  return snapshot
-    .split("\n")
-    .map((line) => {
-      const refMatch = line.match(/\bref=(e\d+)\b/);
-      if (!refMatch) return undefined;
-      const kindMatch = line.match(/^\s*-\s*([^\s]+)/);
-      const quotedMatch = line.match(/"([^"]*)"/);
-      const valueMatch = line.match(/:\s*(.+)$/);
-      return {
-        line,
-        ref: `@${refMatch[1]}`,
-        kind: kindMatch ? kindMatch[1] : undefined,
-        label: quotedMatch ? quotedMatch[1] : undefined,
-        value: valueMatch ? valueMatch[1].trim() : undefined,
-        disabled: /\bdisabled\b/.test(line),
-      };
-    })
-    .filter(Boolean) as Array<any>;
+async function clickRef(ref: string, _logLabel = `click ${ref}`) {
+  await browser.clickRef(ref);
 }
 
-function findEntry(snapshot: string, predicate: (e: any) => boolean) {
-  return parseSnapshotEntries(snapshot).find(predicate);
-}
-
-function findLastEntry(snapshot: string, predicate: (e: any) => boolean) {
-  const entries = parseSnapshotEntries(snapshot);
-  for (let index = entries.length - 1; index >= 0; index -= 1) {
-    if (predicate(entries[index])) return entries[index];
-  }
-  return undefined;
-}
-
-async function clickRef(ref: string, logLabel = `click ${ref}`) {
-  await targetCommand("click", ref, { logLabel });
+async function reload() {
+  await browser.reload().catch(() => undefined);
 }
 
 function stripQuery(url: string) {
@@ -530,159 +382,34 @@ async function readSourceCookies() {
   return normalizedCookies;
 }
 
-function cookieSetArgs(cookie: any) {
-  const args = ["cookies", "set", cookie.name, cookie.value, "--domain", cookie.domain, "--path", cookie.path || "/"];
-  if (cookie.httpOnly) args.push("--httpOnly");
-  if (cookie.secure) args.push("--secure");
-  if (cookie.sameSite) args.push("--sameSite", cookie.sameSite);
-  if (cookie.expires) args.push("--expires", String(cookie.expires));
-  return args;
-}
-
 async function seedCookiesIntoTarget(cookies: any[]) {
   await log("Clearing isolated browser cookies before seeding fresh ChatGPT cookies");
-  await targetCommand("cookies", "clear", { logLabel: "cookies clear" });
+  await browser.cookiesClear();
 
-  let applied = 0;
-  for (const cookie of cookies) {
-    const args = cookieSetArgs(cookie);
-    await log(`Applying cookie ${cookie.name}@${cookie.domain} path=${cookie.path} httpOnly=${cookie.httpOnly} secure=${cookie.secure} sameSite=${cookie.sameSite || "(none)"} expires=${cookie.expires ?? "session"}`);
-    const result = await targetCommand(...args, { logLabel: `cookies set ${cookie.name}@${cookie.domain}` });
-    if (result.code === 0) applied += 1;
-  }
-
-  await log(`Applied ${applied}/${cookies.length} cookies into isolated browser profile`);
-  return applied;
+  await browser.cookiesSet(cookies);
+  await log(`Applied ${cookies.length}/${cookies.length} cookies into isolated browser profile`);
+  return cookies.length;
 }
 
-function buildLoginProbeScript(timeoutMs: number) {
-  return toAsyncJsonScript(`
-    const pageUrl = typeof location === 'object' && location?.href ? location.href : null;
-    const onAuthPage =
-      typeof location === 'object' &&
-      ((typeof location.hostname === 'string' && /^auth\\.openai\\.com$/i.test(location.hostname)) ||
-        (typeof location.pathname === 'string' && /^\\\/(auth|login|signin|log-in)/i.test(location.pathname)));
 
-    const hasLoginCta = () => {
-      const candidates = Array.from(
-        document.querySelectorAll(
-          [
-            'a[href*="/auth/login"]',
-            'a[href*="/auth/signin"]',
-            'button[type="submit"]',
-            'button[data-testid*="login"]',
-            'button[data-testid*="log-in"]',
-            'button[data-testid*="sign-in"]',
-            'button[data-testid*="signin"]',
-            'button',
-            'a',
-          ].join(','),
-        ),
-      );
-      const textMatches = (text) => {
-        if (!text) return false;
-        const normalized = text.toLowerCase().trim();
-        return [
-          'log in',
-          'login',
-          'sign in',
-          'signin',
-          'continue with',
-          'iniciar sesión',
-          'iniciar sesion',
-          'acceder',
-          'entrar',
-        ].some((needle) => normalized.startsWith(needle));
-      };
-      for (const node of candidates) {
-        if (!(node instanceof HTMLElement)) continue;
-        const label =
-          node.textContent?.trim() ||
-          node.getAttribute('aria-label') ||
-          node.getAttribute('title') ||
-          '';
-        if (textMatches(label)) return true;
-      }
-      return false;
-    };
-
-    let status = 0;
-    let error = null;
-    let bodyKeys = [];
-    let bodyHasId = false;
-    let bodyHasEmail = false;
-    let resultName = '';
-    let responsePreview = '';
-    try {
-      if (typeof fetch === 'function') {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), ${timeoutMs});
-        try {
-          const response = await fetch('/backend-api/me', {
-            cache: 'no-store',
-            credentials: 'include',
-            signal: controller.signal,
-          });
-          status = response.status || 0;
-          const contentType = response.headers.get('content-type') || '';
-          if (contentType.includes('application/json')) {
-            const data = await response.clone().json().catch(() => null);
-            if (data && typeof data === 'object' && !Array.isArray(data)) {
-              bodyKeys = Object.keys(data).slice(0, 12);
-              bodyHasId = typeof data.id === 'string' && data.id.length > 0;
-              bodyHasEmail = typeof data.email === 'string' && data.email.includes('@');
-              const name = typeof data.name === 'string' ? data.name.trim() : '';
-              if (name) resultName = name;
-              try {
-                responsePreview = JSON.stringify(data).slice(0, 2000);
-              } catch (_error) {
-                responsePreview = '[unserializable]';
-              }
-            }
-          }
-        } finally {
-          clearTimeout(timeout);
-        }
-      }
-    } catch (err) {
-      error = err ? String(err) : 'unknown';
-    }
-
-    const domLoginCta = hasLoginCta();
-    const loginSignals = domLoginCta || onAuthPage;
-    return {
-      ok: !loginSignals && (status === 0 || status === 200),
-      status,
-      pageUrl,
-      domLoginCta,
-      onAuthPage,
-      error,
-      bodyKeys,
-      bodyHasId,
-      bodyHasEmail,
-      name: resultName,
-      responsePreview,
-    };
-  `);
-}
-
-async function loginProbe() {
+async function loginProbe(): Promise<AuthBootstrapProbeResult> {
   const result = await evalPage(buildLoginProbeScript(LOGIN_PROBE_TIMEOUT_MS), "login probe eval");
   if (!result || typeof result !== "object") {
-    return { ok: false, status: 0, error: "invalid-probe-result" };
+    return { ok: false, status: 0, error: "invalid-probe-result", domLoginCta: false, onAuthPage: false, bodyKeys: [], bodyHasId: false, bodyHasEmail: false };
   }
+  const r = result as Record<string, unknown>;
   return {
-    ok: result.ok === true,
-    status: typeof result.status === "number" ? result.status : 0,
-    pageUrl: typeof result.pageUrl === "string" ? result.pageUrl : undefined,
-    domLoginCta: result.domLoginCta === true,
-    onAuthPage: result.onAuthPage === true,
-    error: typeof result.error === "string" ? result.error : undefined,
-    bodyKeys: Array.isArray(result.bodyKeys) ? result.bodyKeys : [],
-    bodyHasId: result.bodyHasId === true,
-    bodyHasEmail: result.bodyHasEmail === true,
-    name: typeof result.name === "string" ? result.name : undefined,
-    responsePreview: typeof result.responsePreview === "string" ? result.responsePreview : undefined,
+    ok: r.ok === true,
+    status: typeof r.status === "number" ? r.status : 0,
+    pageUrl: typeof r.pageUrl === "string" ? r.pageUrl : undefined,
+    domLoginCta: r.domLoginCta === true,
+    onAuthPage: r.onAuthPage === true,
+    error: typeof r.error === "string" ? r.error : undefined,
+    bodyKeys: Array.isArray(r.bodyKeys) ? r.bodyKeys : [],
+    bodyHasId: r.bodyHasId === true,
+    bodyHasEmail: r.bodyHasEmail === true,
+    name: typeof r.name === "string" ? r.name : undefined,
+    responsePreview: typeof r.responsePreview === "string" ? r.responsePreview : undefined,
   };
 }
 
@@ -695,104 +422,62 @@ async function captureDiagnostics(reason: string) {
     await chmod(URL_PATH, 0o600).catch(() => undefined);
     await chmod(SNAPSHOT_PATH, 0o600).catch(() => undefined);
     await chmod(BODY_PATH, 0o600).catch(() => undefined);
-    await targetCommand("screenshot", SCREENSHOT_PATH, { allowFailure: true, logLabel: `screenshot ${reason}` }).catch(() => undefined);
+    await browser.screenshot(SCREENSHOT_PATH).catch(() => undefined);
     await log(`Captured diagnostics for ${reason}: ${URL_PATH}, ${SNAPSHOT_PATH}, ${BODY_PATH}, ${SCREENSHOT_PATH}`);
   } catch (error: any) {
     await log(`Failed to capture diagnostics for ${reason}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
-function classifyChatPage({ url, snapshot, body, probe }: any) {
-  const text = `${snapshot}\n${body}`;
-  const allowedOrigins = [new URL(config.browser.chatUrl).origin, new URL(config.browser.authUrl).origin, "https://auth.openai.com"];
+function classifyChatPageWithAuth(params: { url: string; snapshot: string; body: string; probe?: AuthBootstrapProbeResult }): ClassifyResult {
+  // Get the base classification from shared utils
+  const baseClassification = classifyChatPage({
+    url: params.url,
+    snapshot: params.snapshot,
+    body: params.body,
+    probe: params.probe,
+    chatUrl: config.browser.chatUrl,
+  });
 
-  const challengePatterns = [/just a moment/i, /verify you are human/i, /cloudflare/i, /captcha|turnstile|hcaptcha/i, /unusual activity detected/i, /we detect suspicious activity/i];
-  if (challengePatterns.some((pattern) => pattern.test(text))) {
+  // Enhance auth-specific messages
+  if (baseClassification.state === "challenge_blocking") {
     return {
-      state: "challenge_blocking",
+      ...baseClassification,
       message:
         `ChatGPT challenge detected after syncing cookies from ${cookieSourceLabel()}. ` +
         `The isolated oracle browser was left open on profile ${runtimeProfileDir}; complete the challenge there, then rerun /oracle-auth. Logs: ${LOG_PATH}`,
     };
   }
 
-  if (/http error 431|request header or cookie too large/i.test(text)) {
+  if (baseClassification.state === "login_required") {
     return {
-      state: "login_required",
+      ...baseClassification,
       message:
-        `Imported auth hit HTTP 431 during ChatGPT auth resolution, which usually means the imported cookie set is too large or stale. ` +
-        `Inspect ${LOG_PATH}.`,
+        `Synced cookies from ${cookieSourceLabel()}, but ChatGPT still rejected the session. ` +
+        `Check auth.chromeProfile/auth.chromeCookiePath and inspect ${LOG_PATH}.`,
     };
   }
 
-  const outagePatterns = [/something went wrong/i, /a network error occurred/i, /an error occurred while connecting to the websocket/i, /try again later/i];
-  if (outagePatterns.some((pattern) => pattern.test(text))) {
-    return { state: "transient_outage_error", message: `ChatGPT is showing a transient outage/error page. Logs: ${LOG_PATH}` };
-  }
-
-  const onAllowedOrigin = allowedOrigins.some((origin) => url.startsWith(origin));
-  const hasComposer = snapshotHasLabel(snapshot, "textbox", CHATGPT_LABELS.composer);
-  const hasAddFiles = snapshotHasLabel(snapshot, "button", CHATGPT_LABELS.addFiles);
-  const hasModelControl = snapshotHasLabel(snapshot, "button", CHATGPT_LABELS.modelSelector) || /button "(Instant|Thinking|Pro)(?: [^"]*)?"/.test(snapshot);
-
-  if (probe?.status === 401 || probe?.status === 403) {
+  if (baseClassification.state === "auth_transitioning") {
     return {
-      state: "login_required",
+      ...baseClassification,
       message:
-        `Synced cookies from ${cookieSourceLabel()}, but ChatGPT still rejected the session ` +
-        `(status=${probe?.status ?? 0}). Check auth.chromeProfile/auth.chromeCookiePath and inspect ${LOG_PATH}.`,
+        `ChatGPT accepted the cookies but is still resolving the authentication flow. ` +
+        `Logs: ${LOG_PATH}`,
     };
   }
 
-  if (probe?.onAuthPage) {
-    if (probe?.bodyHasId || probe?.bodyHasEmail) {
-      return {
-        state: "auth_transitioning",
-        message:
-          `ChatGPT is on /auth/login, but /backend-api/me returned a partial authenticated session. ` +
-          `Trying to drive the login resolution flow. Logs: ${LOG_PATH}`,
-      };
-    }
+  if (baseClassification.state === "authenticated_and_ready") {
     return {
-      state: "login_required",
-      message:
-        `Synced cookies from ${cookieSourceLabel()}, but ChatGPT still rejected the session ` +
-        `(status=${probe?.status ?? 0}). Check auth.chromeProfile/auth.chromeCookiePath and inspect ${LOG_PATH}.`,
-    };
-  }
-
-  if (onAllowedOrigin && probe?.status === 200 && hasComposer && hasAddFiles && hasModelControl) {
-    if (!probe?.domLoginCta) {
-      return {
-        state: "authenticated_and_ready",
-        message: `Imported ChatGPT auth from ${cookieSourceLabel()} into the isolated oracle profile. Logs: ${LOG_PATH}`,
-      };
-    }
-
-    return {
-      state: "auth_transitioning",
-      message:
-        probe?.bodyHasId || probe?.bodyHasEmail
-          ? `ChatGPT backend session is authenticated but the shell still shows public CTA chrome. Logs: ${LOG_PATH}`
-          : `ChatGPT accepted cookies but is still hydrating/auth-selecting. Logs: ${LOG_PATH}`,
-    };
-  }
-
-  if (onAllowedOrigin && probe?.ok && hasComposer && hasAddFiles && hasModelControl) {
-    return {
-      state: "authenticated_and_ready",
+      ...baseClassification,
       message: `Imported ChatGPT auth from ${cookieSourceLabel()} into the isolated oracle profile. Logs: ${LOG_PATH}`,
     };
   }
 
-  if (url && !onAllowedOrigin) {
-    return { state: "login_required", message: `Imported auth redirected away from the expected ChatGPT origin. Logs: ${LOG_PATH}` };
-  }
-
-  return { state: "unknown", message: `ChatGPT page state is not yet ready. Logs: ${LOG_PATH}` };
+  return baseClassification;
 }
 
-async function maybeSelectAccountIdentity(snapshot: string, probe: any) {
+async function maybeSelectAccountIdentity(snapshot: string, probe: AuthBootstrapProbeResult) {
   const candidates: string[] = [];
   if (typeof probe?.name === "string" && probe.name.trim()) {
     candidates.push(probe.name.trim());
@@ -844,7 +529,7 @@ async function waitForImportedAuthReady() {
     await writeFile(URL_PATH, `${url}\n`, { mode: 0o600 }).catch(() => undefined);
     await writeFile(SNAPSHOT_PATH, `${snapshot}\n`, { mode: 0o600 }).catch(() => undefined);
     await writeFile(BODY_PATH, `${body}\n`, { mode: 0o600 }).catch(() => undefined);
-    const classification = classifyChatPage({ url, snapshot, body, probe });
+    const classification = classifyChatPageWithAuth({ url, snapshot, body, probe });
     await log(
       `poll ${iteration}: url=${JSON.stringify(url)} probe=${JSON.stringify(probe)} classification=${classification.state} hasComposer=${snapshotHasLabel(snapshot, "textbox", CHATGPT_LABELS.composer)} hasAddFiles=${snapshotHasLabel(snapshot, "button", CHATGPT_LABELS.addFiles)}`,
     );
@@ -865,12 +550,12 @@ async function waitForImportedAuthReady() {
           await sleep(1500);
           continue;
         }
-        await log(`No account/login resolution click target found. Snapshot entries: ${parseSnapshotEntries(snapshot).map((entry: any) => `${entry.kind}:${entry.label || entry.value || entry.ref}`).join(' | ')}`);
+        await log(`No account/login resolution click target found. Snapshot entries: ${parseSnapshotEntries(snapshot).map((entry: ParsedSnapshotEntry) => `${entry.kind}:${entry.label || entry.value || entry.ref}`).join(' | ')}`);
       }
       if (!retriedAuthTransition && elapsedMs >= 5_000) {
         retriedAuthTransition = true;
         await log("Auth looks accepted but page is still public-looking; reloading once after hydration grace period");
-        await targetCommand("reload", { allowFailure: true, logLabel: "reload-after-auth-transition" }).catch(() => undefined);
+        await reload();
         await sleep(1500);
         continue;
       }
@@ -884,7 +569,7 @@ async function waitForImportedAuthReady() {
     if (classification.state === "transient_outage_error" && !retriedOutage) {
       retriedOutage = true;
       await log("Transient outage detected; reloading once");
-      await targetCommand("reload", { allowFailure: true, logLabel: "reload" }).catch(() => undefined);
+      await reload();
       await sleep(1500);
       continue;
     }

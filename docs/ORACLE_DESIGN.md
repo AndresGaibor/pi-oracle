@@ -18,32 +18,36 @@ Create a `pi` extension that lets the user or agent consult ChatGPT.com through 
 - persisted responses and artifacts under `/tmp`
 - optional same-thread follow-up questions later
 
-## Architecture decision
+## Architecture
 
-The production architecture is now:
+The production architecture is:
 
-- use `agent-browser`
-- do **not** automate the user’s real Chrome in production
+- use **Playwright pure** for browser automation (no external CLI tools)
+- do **not** automate the user's real Chrome in production
 - maintain one authenticated **seed profile** via `/oracle-auth`
 - clone that seed into a **per-job runtime profile** for each oracle run
-- launch each job in its own **runtime browser session**
+- launch each job in its own **Playwright persistent context** for each oracle run
 - persist same-thread continuity by saved `chatUrl`, not by keeping tabs or browsers alive
 - allow parallel jobs only when they do not target the same ChatGPT conversation
 
-## Rejected production path
+## Rejected architectures
+
+### Real-Chrome/CDP automation
 
 The old real-Chrome/CDP architecture is rejected for production.
 
 Why:
-
-- `agent-browser tab new <url>` opens a new tab and selects it
-- `agent-browser tab <index>` switches the active tab
-- upstream `agent-browser` source calls `Page.bringToFront` during tab switching
-- this stole focus in the user’s real environment and disrupted typing
-
-That violates a hard requirement.
+- Automating the user's real Chrome stole focus and disrupted typing
+- Tab switching via `Page.bringToFront` violated a hard requirement
 
 Real-Chrome automation was useful for investigation and earlier smoke tests, but it is no longer the target architecture.
+
+### agent-browser CLI
+
+The `agent-browser` CLI wrapper was replaced with direct Playwright API calls for:
+- Better error handling (no stdout/stderr parsing)
+- Simpler lifecycle (browser tied to worker process)
+- No external binary dependency
 
 ## Current extension surface
 
@@ -357,13 +361,13 @@ Examples:
 
 ## Artifact strategy
 
-The artifact path is now direct and browser-local.
+The artifact path is direct and browser-local.
 
-Use response-local candidate detection exactly as before, but replace browser-download-manager scraping with direct `agent-browser` downloads:
+Use response-local candidate detection exactly as before, but download directly via Playwright:
 
 - find artifact candidates only in the current assistant response region
 - for each candidate ref:
-  - call `agent-browser download <ref> <dest>`
+  - call `browser.downloadByRef(ref, dest)` using Playwright's download event
   - write directly into `/tmp/oracle-<job-id>/artifacts`
   - compute size / sha256 / detected type
   - append manifest entry
@@ -430,7 +434,7 @@ Implemented in code for the pivot and concurrency redesign:
 - persisted job state now records explicit lifecycle phases instead of relying only on coarse statuses
 - poller notifications now use per-job notification claims rather than broad global scan serialization
 - worker now uses a structured ChatGPT page-state classifier
-- worker now downloads artifacts directly with `agent-browser download <ref> <dest>`
+- worker now downloads artifacts directly with Playwright `browser.downloadByRef()`
 - poller scans are now best-effort/non-fatal with per-session in-flight guards
 - worker heartbeats during artifact downloads, writes artifact manifests incrementally, and reopens the saved conversation before artifact capture/download
 - artifact-only responses are treated as valid completion content

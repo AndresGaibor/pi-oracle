@@ -1,139 +1,86 @@
-// pages/chatgpt/chatgpt-auth.page.ts - ChatGPT Authentication Page Object
-import { BasePage } from "../base.page.js";
+// pages/chatgpt/chatgpt-auth.page.ts - ChatGPT Auth Page Object (composes selectors + actions + assertions)
+import { BasePage } from "../base.page";
+import type { BrowserActions } from "../browser-actions.types";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyCookie = any;
+// Re-export sub-modules for consumers
+export type { BrowserActions } from "../browser-actions.types";
+export * from "./chatgpt-auth.selectors";
+// Avoid duplicate exports of SnapshotEntry and parseSnapshotEntries
+export { clickLogin, clickAccountChooser, clickLoginCta } from "./chatgpt-auth.actions";
+export { isOnAuthPage, hasLoginCta, detectChallenge, detectOutage, getLoginProbeScript, parseLoginProbeResult } from "./chatgpt-auth.assertions";
 
+/**
+ * ChatGPTAuthPage – Page Object for ChatGPT authentication.
+ * Composes selectors, actions, and assertions.
+ */
 export class ChatGPTAuthPage extends BasePage {
-	// ---- Session Probe ----
-	async probeSession(): Promise<{
-		authenticated: boolean;
-		email?: string;
-		plan?: string;
-	}> {
-		const result = await this.evaluateCode(`
-      try {
-        const response = await fetch('/backend-api/me', {
-          cache: 'no-store',
-          credentials: 'include',
-        });
-        if (!response.ok) return JSON.stringify({ authenticated: false, status: response.status });
-        const data = await response.json();
-        return JSON.stringify({
-          authenticated: true,
-          email: data.accounts?.[0]?.email || data.email || undefined,
-          plan: data.accounts?.[0]?.entitlement?.subscription_plan || data.plan || 'free',
-        });
-      } catch (e) {
-        return JSON.stringify({ authenticated: false, error: e.message });
-      }
-    `);
+	private chatUrl: string;
 
-		try {
-			return JSON.parse(String(result));
-		} catch {
-			return { authenticated: false };
-		}
+	constructor(chatUrl: string = "https://chatgpt.com") {
+		super();
+		this.chatUrl = chatUrl;
 	}
 
-	// ---- Login with Cookies ----
-	async loginWithCookies(braveProfileDir?: string): Promise<boolean> {
-		const profile =
-			braveProfileDir ||
-			`${process.env.HOME}/Library/Application Support/BraveSoftware/Brave-Browser/Default`;
+	// -----------------------------------------------------------------------
+	// Actions
+	// -----------------------------------------------------------------------
 
-		// 1. Read cookies
-		console.log("  Reading cookies from Brave...");
-
-		try {
-			// Dynamic import to avoid issues when not in browser context
-			const { getCookies } = await import("@steipete/sweet-cookie");
-			const result = await getCookies({
-				url: "https://chatgpt.com",
-				origins: ["https://chatgpt.com", "https://auth.openai.com"],
-				browsers: ["chrome"],
-				mode: "merge",
-				chromeProfile: profile,
-				timeoutMs: 5_000,
-			} as Parameters<typeof getCookies>[0]);
-			const rawCookies = result.cookies as AnyCookie[];
-			console.log(`  ${rawCookies.length} total cookies`);
-
-			// 2. Normalize and filter
-			const { normalizeImportedCookie, filterImportableAuthCookies } =
-				await import("../../worker/auth-cookie-policy.js");
-			const filteredResult = filterImportableAuthCookies(
-				rawCookies as Parameters<typeof normalizeImportedCookie>[],
-				"https://chatgpt.com",
-			);
-			const filtered = filteredResult.cookies;
-			console.log(`  ${filtered.length} auth cookies`);
-
-			if (filtered.length === 0) {
-				console.error("  No ChatGPT cookies found.");
-				console.error(
-					"  Make sure you logged into Brave and close it before running.",
-				);
-				return false;
-			}
-
-			// 3. Navigate to domain first (needed to establish context)
-			await this.navigate("https://chatgpt.com/");
-			await new Promise((r) => setTimeout(r, 2000));
-
-			// 4. Inject cookies
-			console.log("  Injecting cookies...");
-			await this.setCookies(filtered);
-
-			// 5. Reload
-			await this.navigate("https://chatgpt.com/");
-			await new Promise((r) => setTimeout(r, 3000));
-
-			// 6. Verify
-			const session = await this.probeSession();
-			return session.authenticated;
-		} catch (e: unknown) {
-			const msg = e instanceof Error ? e.message : String(e);
-			console.error("  Error reading cookies:", msg);
-			console.error("  Make sure Brave is completely closed (Cmd+Q)");
-			return false;
-		}
+	/** Click login button/link if visible */
+	public async clickLogin(browser: BrowserActions): Promise<boolean> {
+		const { clickLogin } = await import("./chatgpt-auth.actions");
+		return clickLogin(browser);
 	}
 
-	// ---- Detect Auth Page Type ----
-	async detectAuthPage(): Promise<
-		"login" | "signup" | "captcha" | "mfa" | "none"
-	> {
-		const text = await this.getPageText();
-		const lower = text.toLowerCase();
-
-		if (lower.includes("log in") || lower.includes("iniciar sesion"))
-			return "login";
-		if (lower.includes("sign up") || lower.includes("registrar"))
-			return "signup";
-		if (lower.includes("verify") || lower.includes("challenge"))
-			return "captcha";
-		if (lower.includes("enter code") || lower.includes("authentication code"))
-			return "mfa";
-		return "none";
+	/** Click account chooser button by name */
+	public async clickAccountChooser(browser: BrowserActions, accountName: string): Promise<boolean> {
+		const { clickAccountChooser } = await import("./chatgpt-auth.actions");
+		return clickAccountChooser(browser, accountName);
 	}
 
-	// Helper to set cookies in browser context
-	private async setCookies(
-		cookies: Array<{
-			name: string;
-			value: string;
-			domain: string;
-			path: string;
-		}>,
-	): Promise<void> {
-		console.log(`Setting ${cookies.length} cookies...`);
-		// This will be implemented by the Playwright adapter
+	/** Click first visible login CTA */
+	public async clickLoginCta(browser: BrowserActions): Promise<boolean> {
+		const { clickLoginCta } = await import("./chatgpt-auth.actions");
+		return clickLoginCta(browser);
 	}
 
-	// Helper to evaluate code in browser context
-	private async evaluateCode(code: string): Promise<unknown> {
-		console.log(`Evaluating: ${code.slice(0, 50)}...`);
-		return undefined;
+	// -----------------------------------------------------------------------
+	// Assertions
+	// -----------------------------------------------------------------------
+
+	/** Check if on auth page by URL */
+	public isOnAuthPage(url: string): boolean {
+		const { isOnAuthPage } = require("./chatgpt-auth.assertions");
+		return isOnAuthPage(url);
+	}
+
+	/** Check if login CTA is visible */
+	public async hasLoginCta(browser: BrowserActions): Promise<boolean> {
+		const { hasLoginCta } = await import("./chatgpt-auth.assertions");
+		const snapshot = await browser.snapshotText();
+		return hasLoginCta(snapshot);
+	}
+
+	/** Detect challenge page */
+	public detectChallenge(text: string): { detected: boolean; type?: string } {
+		const { detectChallenge } = require("./chatgpt-auth.assertions");
+		return detectChallenge(text);
+	}
+
+	/** Detect outage page */
+	public detectOutage(text: string): { detected: boolean; type?: string } {
+		const { detectOutage } = require("./chatgpt-auth.assertions");
+		return detectOutage(text);
+	}
+
+	/** Get login probe script */
+	public getLoginProbeScript(timeoutMs: number = 5000): string {
+		const { getLoginProbeScript } = require("./chatgpt-auth.assertions");
+		return getLoginProbeScript(timeoutMs);
+	}
+
+	/** Parse login probe result */
+	public parseLoginProbe(result: unknown) {
+		const { parseLoginProbeResult } = require("./chatgpt-auth.assertions");
+		return parseLoginProbeResult(result);
 	}
 }

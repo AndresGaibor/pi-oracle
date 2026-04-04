@@ -1,5 +1,5 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { isLockTimeoutError, withGlobalReconcileLock } from "./locks.js";
+import { isLockTimeoutError, withGlobalReconcileLock } from "./locks";
 import {
   getSessionFile,
   getStaleOracleJobReason,
@@ -10,8 +10,8 @@ import {
   reconcileStaleOracleJobs,
   releaseNotificationClaim,
   tryClaimNotification,
-} from "./jobs.js";
-import { getProjectId, getSessionId } from "./runtime.js";
+} from "./jobs";
+import { getProjectId, getSessionId } from "./runtime";
 
 const activePollers = new Map<string, NodeJS.Timeout>();
 const scansInFlight = new Set<string>();

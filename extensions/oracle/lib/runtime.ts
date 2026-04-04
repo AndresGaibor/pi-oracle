@@ -3,8 +3,8 @@ import { spawn } from "node:child_process";
 import { existsSync, realpathSync, readFileSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import type { OracleConfig } from "./config.js";
-import { createLease, listLeaseMetadata, readLeaseMetadata, releaseLease, withAuthLock } from "./locks.js";
+import type { OracleConfig } from "./config";
+import { createLease, listLeaseMetadata, readLeaseMetadata, releaseLease, withAuthLock } from "./locks";
 
 const SEED_GENERATION_FILE = ".oracle-seed-generation";
 
@@ -172,43 +172,20 @@ export async function cloneSeedProfileToRuntime(config: OracleConfig, runtimePro
   return getSeedGeneration(config);
 }
 
-const AGENT_BROWSER_CLOSE_TIMEOUT_MS = 10_000;
+/**
+ * In the pure Playwright approach, the browser is launched as a child process
+ * of the worker via launchPersistentContext. When the worker process exits,
+ * the browser automatically terminates. This function is kept for compatibility
+ * but no longer needs to spawn external commands.
+ */
+async function closeRuntimeBrowserSession(_runtimeSessionName: string): Promise<string | undefined> {
+  // Browser lifecycle is tied to worker process; no separate cleanup needed.
+  return undefined;
+}
 
 export interface OracleCleanupReport {
   attempted: Array<"browser" | "runtimeProfileDir" | "conversationLease" | "runtimeLease">;
   warnings: string[];
-}
-
-async function closeRuntimeBrowserSession(runtimeSessionName: string): Promise<string | undefined> {
-  return new Promise<string | undefined>((resolve) => {
-    const child = spawn("agent-browser", ["--session", runtimeSessionName, "close"], { stdio: "ignore" });
-    let settled = false;
-    let timeout: NodeJS.Timeout | undefined;
-    let timedOut = false;
-
-    const finish = (warning?: string) => {
-      if (settled) return;
-      settled = true;
-      if (timeout) clearTimeout(timeout);
-      resolve(warning);
-    };
-
-    timeout = setTimeout(() => {
-      timedOut = true;
-      child.kill("SIGTERM");
-      setTimeout(() => {
-        child.kill("SIGKILL");
-        finish(`Timed out closing agent-browser session ${runtimeSessionName} after ${AGENT_BROWSER_CLOSE_TIMEOUT_MS}ms`);
-      }, 2_000).unref?.();
-    }, AGENT_BROWSER_CLOSE_TIMEOUT_MS);
-    timeout.unref?.();
-
-    child.on("error", (error) => finish(`Failed to close agent-browser session ${runtimeSessionName}: ${error.message}`));
-    child.on("close", (code) => {
-      if (timedOut || code === 0) finish();
-      else finish(`agent-browser close exited with code ${code} for session ${runtimeSessionName}`);
-    });
-  });
 }
 
 export async function cleanupRuntimeArtifacts(runtime: {

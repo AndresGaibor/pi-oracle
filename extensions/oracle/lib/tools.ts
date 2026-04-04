@@ -18,9 +18,9 @@ const Type = {
 };
 
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { isLockTimeoutError, withGlobalReconcileLock, withLock } from "./locks.js";
-import { loadOracleConfig, EFFORTS, MODEL_FAMILIES, type OracleEffort, type OracleModelFamily } from "./config.js";
-import { type OracleJob } from "./jobs.js";
+import { isLockTimeoutError, withGlobalReconcileLock, withLock } from "./locks";
+import { loadOracleConfig, EFFORTS, MODEL_FAMILIES, type OracleEffort, type OracleModelFamily } from "./config";
+import { type OracleJob } from "./jobs";
 import {
   cancelOracleJob,
   createJob,
@@ -33,8 +33,8 @@ import {
   spawnWorker,
   updateJob,
   withJobPhase,
-} from "./jobs.js";
-import { refreshOracleStatus } from "./poller.js";
+} from "./jobs";
+import { refreshOracleStatus } from "./poller";
 import {
   acquireConversationLease,
   acquireRuntimeLease,
@@ -43,7 +43,7 @@ import {
   getProjectId,
   getSessionId,
   parseConversationId,
-} from "./runtime.js";
+} from "./runtime";
 
 const ORACLE_SUBMIT_PARAMS = Type.Object({
   prompt: Type.String({ description: "Prompt text to send to ChatGPT web." }),

@@ -3,7 +3,9 @@ import { existsSync } from "node:fs";
 import { appendFile, chmod, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { spawn } from "node:child_process";
-import adapter from "../../../adapter/playwright-adapter";
+import { parseSnapshotEntries, findEntry, findLastEntry, type ParsedSnapshotEntry } from "../shared/snapshot-utils";
+import { buildLoginProbeScript, classifyChatPage, type LoginProbeResult, type ClassifyResult, type PageState } from "../shared/login-utils";
+import * as browser from "../lib/browser";
 
 const jobId = process.argv[2];
 if (!jobId) {
@@ -64,8 +66,8 @@ function snapshotHasLabel(snapshot: string, kind: string, labels: string[]): boo
   return labels.some((label) => snapshot.includes(`${kind} "${label}"`));
 }
 
-function findLabeledEntry(snapshot: string, kind: string, labels: string[], predicate = () => true) {
-  return findEntry(snapshot, (candidate: any) => candidate.kind === kind && labelMatches(candidate.label, labels) && predicate(candidate));
+function findLabeledEntry(snapshot: string, kind: string, labels: string[], predicate: (entry: ParsedSnapshotEntry) => boolean = () => true) {
+  return findEntry(snapshot, (candidate) => candidate.kind === kind && labelMatches(candidate.label, labels) && predicate(candidate));
 }
 
 function effortLabelsFor(effortLabel: string): string[] {
@@ -314,7 +316,7 @@ async function cleanupRuntime(job: any) {
   if (!job || cleaningUpRuntime) return;
   cleaningUpRuntime = true;
   try {
-    await closeBrowser(job).catch(() => undefined);
+    await browser.close().catch(() => undefined);
     await releaseLease("conversation", job.conversationId).catch(() => undefined);
     await releaseLease("runtime", job.runtimeId).catch(() => undefined);
     await rm(job.runtimeProfileDir, { recursive: true, force: true }).catch(() => undefined);
@@ -323,212 +325,74 @@ async function cleanupRuntime(job: any) {
   }
 }
 
-function browserBaseArgs(job: any, options: any = {}) {
-  const args = ["--session", job.runtimeSessionName];
-  if (options.withLaunchOptions) {
-    args.push("--profile", job.runtimeProfileDir);
-    if (job.config.browser.executablePath) args.push("--executable-path", job.config.browser.executablePath);
-    if (job.config.browser.userAgent) args.push("--user-agent", job.config.browser.userAgent);
-    if (Array.isArray(job.config.browser.args) && job.config.browser.args.length > 0) args.push("--args", job.config.browser.args.join(","));
-    if (options.mode === "headed") args.push("--headed");
-  }
-  return args;
-}
-
-async function closeBrowser(job: any) {
+async function closeBrowser(_job: any) {
   if (cleaningUpBrowser) return;
   cleaningUpBrowser = true;
   try {
-    if (process.env.USE_PLAYWRIGHT === "1") {
-      await adapter.close();
-    } else {
-      await spawnCommand("agent-browser", [...browserBaseArgs(job), "close"], { allowFailure: true });
-    }
+    await browser.close().catch(() => undefined);
   } finally {
     browserStarted = false;
     pageToken = null;
-    cleaningUpBrowser = false;
   }
 }
 
 async function launchBrowser(job: any, url: string) {
   await closeBrowser(job);
-  const mode = job.config.browser.runMode;
-  if (process.env.USE_PLAYWRIGHT === "1") {
-    await adapter.launchPersistent(
-      job.runtimeProfileDir,
-      job.config.browser.executablePath,
-      job.config.browser.args,
-      job.config.browser.userAgent,
-    );
-    pageToken = await adapter.open(url);
-    browserStarted = true;
-  } else {
-    await spawnCommand("agent-browser", [...browserBaseArgs(job, { withLaunchOptions: true, mode }), "open", url]);
-    browserStarted = true;
-  }
+  const headless = job.config.browser.runMode !== "headed";
+  await browser.launch({
+    userDataDir: job.runtimeProfileDir,
+    executablePath: job.config.browser.executablePath,
+    userAgent: job.config.browser.userAgent,
+    args: Array.isArray(job.config.browser.args) ? job.config.browser.args : undefined,
+    headless,
+  });
+  browserStarted = true;
+  // open the target URL in the main page
+  await browser.open(url);
 }
 
-async function streamStatus(job: any) {
-  const { stdout } = await spawnCommand("agent-browser", [...browserBaseArgs(job), "--json", "stream", "status"], { allowFailure: true });
-  try {
-    const parsed = JSON.parse(stdout || "{}");
-    return parsed?.data || {};
-  } catch {
-    return {};
-  }
+function streamStatus(_job: any) {
+  return browser.getStatus();
 }
 
-async function ensureBrowserConnected(job: any) {
+async function ensureBrowserConnected(_job: any) {
   if (!browserStarted || cleaningUpBrowser) return;
-  if (process.env.USE_PLAYWRIGHT === "1") return; // adapter manages connection
-  const status = await streamStatus(job);
+  const status = streamStatus(null);
   if (status.connected === false) {
     throw new Error("The isolated oracle browser disconnected during the job.");
   }
 }
 
-async function agentBrowser(job: any, ...args: any[]) {
-  let options: SpawnOptions | undefined;
-  const maybeOptions = args.at(-1);
-  if (
-    maybeOptions &&
-    typeof maybeOptions === "object" &&
-    !Array.isArray(maybeOptions) &&
-    (Object.hasOwn(maybeOptions, "allowFailure") ||
-      Object.hasOwn(maybeOptions, "input") ||
-      Object.hasOwn(maybeOptions, "cwd") ||
-      Object.hasOwn(maybeOptions, "timeoutMs"))
-  ) {
-    options = args.pop();
+function parseEvalResult(value: any): any {
+  if (value === undefined) return undefined;
+  if (typeof value === "string") {
+    let trimmed = value.trim();
+    try {
+      let parsed = JSON.parse(trimmed);
+      while (typeof parsed === "string") parsed = JSON.parse(parsed);
+      return parsed;
+    } catch {
+      return trimmed;
+    }
   }
-  await ensureBrowserConnected(job);
-  return spawnCommand("agent-browser", [...browserBaseArgs(job), ...args], options);
-}
-
-function parseEvalResult(stdout: string): any {
-  if (!stdout) return undefined;
-  let value = stdout.trim();
-  try {
-    let parsed = JSON.parse(value);
-    while (typeof parsed === "string") parsed = JSON.parse(parsed);
-    return parsed;
-  } catch {
-    return value;
-  }
+  return value;
 }
 
 function toJsonScript(expression: string) {
   return `JSON.stringify((() => { ${expression} })(), null, 2)`;
 }
 
-async function evalPage(job: any, script: string) {
-  if (process.env.USE_PLAYWRIGHT === "1") {
-    if (!pageToken) throw new Error("No page available");
-    return await adapter.evaluate(pageToken, script);
-  }
-  const result = await agentBrowser(job, "eval", "--stdin", { input: script });
-  return parseEvalResult(result.stdout);
+async function evalPage(_job: any, script: string) {
+  const raw = await browser.evaluate(browser.getMainPageId(), script);
+  // Scripts wrapped in toJsonScript return a JSON string; parse it back.
+  if (typeof raw === "string") return parseEvalResult(raw);
+  return raw;
 }
 
-function toAsyncJsonScript(expression: string) {
-  return `(async () => JSON.stringify(await (async () => { ${expression} })(), null, 2))()`;
-}
-
-function buildLoginProbeScript(timeoutMs: number) {
-  return toAsyncJsonScript(`
-    const pageUrl = typeof location === 'object' && location?.href ? location.href : null;
-    const onAuthPage =
-      typeof location === 'object' &&
-      ((typeof location.hostname === 'string' && /^auth\\.openai\\.com$/i.test(location.hostname)) ||
-        (typeof location.pathname === 'string' && /^\\/(auth|login|signin|log-in)/i.test(location.pathname)));
-
-    const hasLoginCta = () => {
-      const candidates = Array.from(
-        document.querySelectorAll(
-          [
-            'a[href*="/auth/login"]',
-            'a[href*="/auth/signin"]',
-            'button[type="submit"]',
-            'button[data-testid*="login"]',
-            'button[data-testid*="log-in"]',
-            'button[data-testid*="sign-in"]',
-            'button[data-testid*="signin"]',
-            'button',
-            'a',
-          ].join(','),
-        ),
-      );
-      const textMatches = (text) => {
-        if (!text) return false;
-        const normalized = text.toLowerCase().trim();
-        return ['log in', 'login', 'sign in', 'signin', 'continue with'].some((needle) => normalized.startsWith(needle));
-      };
-      for (const node of candidates) {
-        if (!(node instanceof HTMLElement)) continue;
-        const label =
-          node.textContent?.trim() ||
-          node.getAttribute('aria-label') ||
-          node.getAttribute('title') ||
-          '';
-        if (textMatches(label)) return true;
-      }
-      return false;
-    };
-
-    let status = 0;
-    let error = null;
-    let bodyKeys = [];
-    let bodyHasId = false;
-    let bodyHasEmail = false;
-    try {
-      if (typeof fetch === 'function') {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), ${timeoutMs});
-        try {
-          const response = await fetch('/backend-api/me', {
-            cache: 'no-store',
-            credentials: 'include',
-            signal: controller.signal,
-          });
-          status = response.status || 0;
-          const contentType = response.headers.get('content-type') || '';
-          if (contentType.includes('application/json')) {
-            const data = await response.clone().json().catch(() => null);
-            if (data && typeof data === 'object' && !Array.isArray(data)) {
-              bodyKeys = Object.keys(data).slice(0, 12);
-              bodyHasId = typeof data.id === 'string' && data.id.length > 0;
-              bodyHasEmail = typeof data.email === 'string' && data.email.includes('@');
-            }
-          }
-        } finally {
-          clearTimeout(timeout);
-        }
-      }
-    } catch (err) {
-      error = err ? String(err) : 'unknown';
-    }
-
-    const domLoginCta = hasLoginCta();
-    const loginSignals = domLoginCta || onAuthPage;
-    return {
-      ok: !loginSignals && (status === 0 || status === 200),
-      status,
-      pageUrl,
-      domLoginCta,
-      onAuthPage,
-      error,
-      bodyKeys,
-      bodyHasId,
-      bodyHasEmail,
-    };
-  `);
-}
-
-async function loginProbe(job: any) {
-  const result = await evalPage(job, buildLoginProbeScript(5_000));
+async function loginProbe(_job: any): Promise<LoginProbeResult> {
+  const result = await evalPage(null, buildLoginProbeScript(5_000));
   if (!result || typeof result !== "object") {
-    return { ok: false, status: 0, error: "invalid-probe-result" };
+    return { ok: false, status: 0, domLoginCta: false, onAuthPage: false, bodyKeys: [], bodyHasId: false, bodyHasEmail: false, error: "invalid-probe-result" };
   }
   return {
     ok: result.ok === true,
@@ -543,12 +407,8 @@ async function loginProbe(job: any) {
   };
 }
 
-async function currentUrl(job: any): Promise<string> {
-  if (process.env.USE_PLAYWRIGHT === "1") {
-    return await adapter.getUrl();
-  }
-  const { stdout } = await agentBrowser(job, "get", "url");
-  return stdout;
+async function currentUrl(_job: any): Promise<string> {
+  return browser.getUrl();
 }
 
 function stripQuery(url: string) {
@@ -562,66 +422,16 @@ function stripQuery(url: string) {
   }
 }
 
-async function snapshotText(job: any): Promise<string> {
-  if (process.env.USE_PLAYWRIGHT === "1") {
-    if (!pageToken) throw new Error("No page available");
-    return await adapter.snapshotText(pageToken);
-  }
-  const { stdout } = await agentBrowser(job, "snapshot", "-i");
-  return stdout;
+async function snapshotText(_job: any): Promise<string> {
+  return browser.snapshotText();
 }
 
-async function pageText(job: any): Promise<string> {
-  if (process.env.USE_PLAYWRIGHT === "1") {
-    return await adapter.pageText();
-  }
-  const { stdout } = await agentBrowser(job, "get", "text", "body", { allowFailure: true });
-  return stdout || "";
+async function pageText(_job: any): Promise<string> {
+  return browser.pageText();
 }
 
-interface SnapshotEntry {
-  line: string;
-  ref: string;
-  kind: string | undefined;
-  label: string | undefined;
-  value: string | undefined;
-  disabled: boolean;
-}
 
-function parseSnapshotEntries(snapshot: string): SnapshotEntry[] {
-  return snapshot
-    .split("\n")
-    .map((line) => {
-      const refMatch = line.match(/\bref=(e\d+|@e\d+)\b/);
-      if (!refMatch) return undefined;
-      const kindMatch = line.match(/^\s*-\s*([^\s]+)/);
-      const quotedMatch = line.match(/"([^"]*)"/);
-      const valueMatch = line.match(/:\s*(.+)$/);
-      return {
-        line,
-        ref: refMatch[1].startsWith("@") ? refMatch[1] : `@${refMatch[1]}`,
-        kind: kindMatch ? kindMatch[1] : undefined,
-        label: quotedMatch ? quotedMatch[1] : undefined,
-        value: valueMatch ? valueMatch[1].trim() : undefined,
-        disabled: /\bdisabled\b/.test(line),
-      };
-    })
-    .filter(Boolean) as SnapshotEntry[];
-}
-
-function findEntry(snapshot: string, predicate: (entry: SnapshotEntry) => boolean): SnapshotEntry | undefined {
-  return parseSnapshotEntries(snapshot).find(predicate);
-}
-
-function findLastEntry(snapshot: string, predicate: (entry: SnapshotEntry) => boolean): SnapshotEntry | undefined {
-  const entries = parseSnapshotEntries(snapshot);
-  for (let index = entries.length - 1; index >= 0; index -= 1) {
-    if (predicate(entries[index])) return entries[index];
-  }
-  return undefined;
-}
-
-function matchesModelFamilyButton(candidate: SnapshotEntry, family: string) {
+function matchesModelFamilyButton(candidate: ParsedSnapshotEntry, family: string) {
   return candidate.kind === "button" && typeof candidate.label === "string" && candidate.label.startsWith(MODEL_FAMILY_PREFIX[family]) && !candidate.disabled;
 }
 
@@ -717,17 +527,8 @@ function snapshotWeaklyMatchesRequestedModel(snapshot: string, job: any) {
   return false;
 }
 
-async function clickRef(job: any, ref: string) {
-  if (process.env.USE_PLAYWRIGHT === "1") {
-    if (!pageToken) throw new Error("No page available");
-    // Extract element token from ref (e.g., "@e1" -> "e1")
-    const token = ref.startsWith("@") ? ref.slice(1) : ref;
-    // Use adapter's click via evaluate on the page
-    await adapter.evaluate(pageToken, `document.querySelector('[data-ref="${token}"]')?.click() || (() => { const el = Array.from(document.querySelectorAll('*')).find(e => e.getAttribute('ref') === '${token}'); el?.click(); })()`);
-    await sleep(200);
-  } else {
-    await agentBrowser(job, "click", ref);
-  }
+async function clickRef(_job: any, ref: string) {
+  await browser.clickRef(ref);
 }
 
 async function clickLabeledEntry(job: any, label: string | string[], options: any = {}) {
@@ -735,7 +536,7 @@ async function clickLabeledEntry(job: any, label: string | string[], options: an
   const snapshot = await snapshotText(job);
   const entry = (options.last ? findLastEntry : findEntry)(
     snapshot,
-    (candidate: SnapshotEntry) => labelMatches(candidate.label, labels) && (!options.kind || candidate.kind === options.kind) && !candidate.disabled,
+    (candidate: ParsedSnapshotEntry) => labelMatches(candidate.label, labels) && (!options.kind || candidate.kind === options.kind) && !candidate.disabled,
   );
   if (!entry) throw new Error(`Could not find labeled entry: ${labels.join(" / ")}`);
   await clickRef(job, entry.ref);
@@ -747,7 +548,7 @@ async function maybeClickLabeledEntry(job: any, label: string | string[], option
   const snapshot = await snapshotText(job);
   const entry = (options.last ? findLastEntry : findEntry)(
     snapshot,
-    (candidate: SnapshotEntry) => labelMatches(candidate.label, labels) && (!options.kind || candidate.kind === options.kind) && !candidate.disabled,
+    (candidate: ParsedSnapshotEntry) => labelMatches(candidate.label, labels) && (!options.kind || candidate.kind === options.kind) && !candidate.disabled,
   );
   if (!entry) return false;
   await clickRef(job, entry.ref);
@@ -759,89 +560,14 @@ async function openEffortDropdown(job: any) {
   const effortLabels = new Set(allEffortLabels());
   const entry = findEntry(
     snapshot,
-    (candidate: SnapshotEntry) => !!(candidate.kind === "combobox" && candidate.value && effortLabels.has(candidate.value) && !candidate.disabled),
+    (candidate: ParsedSnapshotEntry) => !!(candidate.kind === "combobox" && candidate.value && effortLabels.has(candidate.value) && !candidate.disabled),
   );
   if (!entry) return false;
   await clickRef(job, entry.ref);
   return true;
 }
 
-async function setComposerText(job: any, text: string) {
-  const snapshot = await snapshotText(job);
-  const entry = findLabeledEntry(snapshot, "textbox", CHATGPT_LABELS.composer);
-  if (!entry) throw new Error("Could not find ChatGPT composer textbox");
-  
-  if (process.env.USE_PLAYWRIGHT === "1") {
-    if (!pageToken) throw new Error("No page available");
-    const token = entry.ref.startsWith("@") ? entry.ref.slice(1) : entry.ref;
-    await adapter.fill(token, text, pageToken);
-  } else {
-    await agentBrowser(job, "fill", entry.ref, text);
-  }
-}
 
-function classifyChatPage({ job, url, snapshot, body, probe }: any) {
-  const text = `${snapshot}\n${body}`;
-  const challengePatterns = [
-    /just a moment/i,
-    /verify you are human/i,
-    /cloudflare/i,
-    /captcha|turnstile|hcaptcha/i,
-    /unusual activity detected/i,
-    /we detect suspicious activity/i,
-  ];
-  if (challengePatterns.some((pattern) => pattern.test(text))) {
-    return { state: "challenge_blocking", message: "ChatGPT is showing a challenge/verification page" };
-  }
-
-  const outagePatterns = [
-    /something went wrong/i,
-    /a network error occurred/i,
-    /an error occurred while connecting to the websocket/i,
-    /try again later/i,
-    /rate limit/i,
-  ];
-  if (outagePatterns.some((pattern) => pattern.test(text))) {
-    return { state: "transient_outage_error", message: "ChatGPT is showing a transient outage/error page" };
-  }
-
-  const allowedOrigins = [new URL(job.config.browser.chatUrl).origin, "https://auth.openai.com"];
-  const onAllowedOrigin = typeof url === "string" && allowedOrigins.some((origin) => url.startsWith(origin));
-  const onAuthPath = typeof url === "string" && url.includes("/auth/");
-  const hasComposer = snapshotHasLabel(snapshot, "textbox", CHATGPT_LABELS.composer);
-  const hasAddFiles = snapshotHasLabel(snapshot, "button", CHATGPT_LABELS.addFiles);
-  const hasModelControl = snapshotHasLabel(snapshot, "button", CHATGPT_LABELS.modelSelector) || /button "(Instant|Thinking|Pro)(?: [^"]*)?"/.test(snapshot);
-
-  if (probe?.status === 401 || probe?.status === 403) {
-    return { state: "login_required", message: "ChatGPT login is required. Run /oracle-auth." };
-  }
-
-  if (onAuthPath || probe?.onAuthPage) {
-    if (probe?.bodyHasId || probe?.bodyHasEmail) {
-      return {
-        state: "auth_transitioning",
-        message: "ChatGPT is on an auth page even though the backend session is partially authenticated. Rerun /oracle-auth.",
-      };
-    }
-    return { state: "login_required", message: "ChatGPT login is required. Run /oracle-auth." };
-  }
-
-  if (onAllowedOrigin && probe?.status === 200 && hasComposer && hasAddFiles && hasModelControl) {
-    if (probe?.domLoginCta && (probe?.bodyHasId || probe?.bodyHasEmail)) {
-      return {
-        state: "auth_transitioning",
-        message: "ChatGPT backend session is authenticated, but the web shell still shows public login CTA chrome. Rerun /oracle-auth.",
-      };
-    }
-    return { state: "authenticated_and_ready", message: "ChatGPT is authenticated and ready." };
-  }
-
-  if (url && !onAllowedOrigin) {
-    return { state: "login_required", message: "ChatGPT redirected away from the expected authenticated chat origin." };
-  }
-
-  return { state: "unknown", message: "ChatGPT page is not ready yet." };
-}
 
 async function captureDiagnostics(job: any, reason: string) {
   if (!browserStarted) return;
@@ -854,70 +580,11 @@ async function captureDiagnostics(job: any, reason: string) {
     await secureWriteText(join(job.logsDir, `${reason}.url.txt`), `${url || ""}\n`);
     await secureWriteText(join(job.logsDir, `${reason}.snapshot.txt`), `${snapshot || ""}\n`);
     await secureWriteText(join(job.logsDir, `${reason}.body.txt`), `${body || ""}\n`);
-    if (process.env.USE_PLAYWRIGHT === "1") {
-      await adapter.screenshot(join(job.logsDir, `${reason}.png`));
-    } else {
-      await agentBrowser(job, "screenshot", join(job.logsDir, `${reason}.png`)).catch(() => undefined);
-    }
+    await browser.screenshot(join(job.logsDir, `${reason}.png`)).catch(() => undefined);
   } catch {
-    // best effort only
   }
 }
 
-async function waitForOracleReady(job: any) {
-  const startedAt = Date.now();
-  const timeoutAt = startedAt + 30_000;
-  let retriedOutage = false;
-  let retriedAuthTransition = false;
-
-  while (Date.now() < timeoutAt) {
-    const [url, snapshot, body, probe] = await Promise.all([
-      currentUrl(job).catch(() => ""),
-      snapshotText(job).catch(() => ""),
-      pageText(job).catch(() => ""),
-      loginProbe(job).catch(() => ({ ok: false, status: 0, error: "probe-failed" })),
-    ]);
-    const classification = classifyChatPage({ job, url, snapshot, body, probe });
-    if (classification.state === "authenticated_and_ready") return;
-    if (classification.state === "auth_transitioning") {
-      const elapsedMs = Date.now() - startedAt;
-      if (!retriedAuthTransition && elapsedMs >= 5_000) {
-        retriedAuthTransition = true;
-        if (process.env.USE_PLAYWRIGHT === "1") {
-          if (pageToken) await adapter.evaluate(pageToken, "location.reload()");
-        } else {
-          await agentBrowser(job, "reload").catch(() => undefined);
-        }
-        await sleep(1500);
-        continue;
-      }
-      if (elapsedMs >= 15_000) {
-        await captureDiagnostics(job, "preflight-auth-transition");
-        throw new Error("ChatGPT backend session is authenticated, but the web shell stayed in a partially logged-in state. Rerun /oracle-auth.");
-      }
-      await sleep(1000);
-      continue;
-    }
-    if (classification.state === "transient_outage_error" && !retriedOutage) {
-      retriedOutage = true;
-      if (process.env.USE_PLAYWRIGHT === "1") {
-        if (pageToken) await adapter.evaluate(pageToken, "location.reload()");
-      } else {
-        await agentBrowser(job, "reload").catch(() => undefined);
-      }
-      await sleep(1500);
-      continue;
-    }
-    if (classification.state !== "unknown") {
-      await captureDiagnostics(job, "preflight");
-      throw new Error(classification.message);
-    }
-    await sleep(1000);
-  }
-
-  await captureDiagnostics(job, "preflight-timeout");
-  throw new Error("Timed out waiting for the ChatGPT chat UI to become ready");
-}
 
 function detectUploadErrorText(text: string): string | undefined {
   const patterns = [
@@ -930,250 +597,8 @@ function detectUploadErrorText(text: string): string | undefined {
   return patterns.find((pattern) => text.toLowerCase().includes(pattern.toLowerCase()));
 }
 
-function composerSnapshotSlice(snapshot: string) {
-  const lines = snapshot.split("\n");
-  let composerIndex = -1;
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    if (snapshotHasLabel(lines[index], "textbox", CHATGPT_LABELS.composer)) {
-      composerIndex = index;
-      break;
-    }
-  }
-  if (composerIndex === -1) return snapshot;
-  const startIndex = Math.max(0, composerIndex - 16);
-  const endIndex = Math.min(lines.length, composerIndex + 16);
-  return lines.slice(startIndex, endIndex).join("\n");
-}
 
-function composerFileEntryCount(snapshot: string, fileLabel: string) {
-  const composerSlice = composerSnapshotSlice(snapshot);
-  return parseSnapshotEntries(composerSlice).filter((candidate) => candidate.label === fileLabel).length;
-}
 
-async function waitForUploadConfirmed(job: any, fileLabel: string, baselineCount: number) {
-  const timeoutAt = Date.now() + 10 * 60 * 1000;
-  let stableCount = 0;
-
-  while (Date.now() < timeoutAt) {
-    await heartbeat();
-    const [snapshot, body] = await Promise.all([snapshotText(job), pageText(job).catch(() => "")]);
-
-    const errorText = detectUploadErrorText(`${snapshot}\n${body}`);
-    if (errorText) {
-      throw new Error(`Upload error detected: ${errorText}`);
-    }
-
-    const sendEntry = findEntry(
-      snapshot,
-      (candidate) => candidate.kind === "button" && labelMatches(candidate.label, CHATGPT_LABELS.send) && !candidate.disabled,
-    );
-    const fileCount = composerFileEntryCount(snapshot, fileLabel);
-
-    if (sendEntry && fileCount > baselineCount) {
-      stableCount += 1;
-      if (stableCount >= 2) return sendEntry;
-    } else {
-      stableCount = 0;
-    }
-
-    await sleep(1000);
-  }
-
-  throw new Error(`Timed out waiting for upload confirmation for ${fileLabel}`);
-}
-
-async function waitForSendReady(job: any) {
-  const timeoutAt = Date.now() + 5 * 60 * 1000;
-  while (Date.now() < timeoutAt) {
-    await heartbeat();
-    const snapshot = await snapshotText(job);
-    const body = await pageText(job).catch(() => "");
-    const errorText = detectUploadErrorText(`${snapshot}\n${body}`);
-    if (errorText) {
-      throw new Error(`Upload error detected: ${errorText}`);
-    }
-
-    const entry = findEntry(
-      snapshot,
-      (candidate) => candidate.kind === "button" && labelMatches(candidate.label, CHATGPT_LABELS.send) && !candidate.disabled,
-    );
-    if (entry) return entry;
-    await sleep(1000);
-  }
-  throw new Error(`Timed out waiting for ${CHATGPT_LABELS.send.join(" / ")} to become enabled`);
-}
-
-async function clickSend(job: any) {
-  const entry = await waitForSendReady(job);
-  await clickRef(job, entry.ref);
-}
-
-async function openModelConfiguration(job: any) {
-  const openerPredicates = [
-    (candidate: SnapshotEntry) => candidate.kind === "button" && labelMatches(candidate.label, CHATGPT_LABELS.modelSelector) && !candidate.disabled,
-    (candidate: SnapshotEntry) => candidate.kind === "button" && ["Instant", "Thinking", "Pro"].includes(candidate.label || "") && !candidate.disabled,
-  ];
-
-  const initialSnapshot = await snapshotText(job);
-  if (snapshotHasModelConfigurationUi(initialSnapshot)) return initialSnapshot;
-
-  for (const predicate of openerPredicates) {
-    const snapshot = await snapshotText(job);
-    const entry = findEntry(snapshot, predicate);
-    if (!entry) continue;
-    await clickRef(job, entry.ref);
-    if (process.env.USE_PLAYWRIGHT === "1") {
-      await sleep(800);
-    } else {
-      await agentBrowser(job, "wait", "800");
-    }
-    const after = await snapshotText(job);
-    if (snapshotHasModelConfigurationUi(after)) return after;
-
-    const configureEntry = findEntry(
-      after,
-      (candidate: SnapshotEntry) => candidate.kind === "menuitem" && labelMatches(candidate.label, CHATGPT_LABELS.configure) && !candidate.disabled,
-    );
-
-    if (configureEntry) {
-      await clickRef(job, configureEntry.ref);
-      if (process.env.USE_PLAYWRIGHT === "1") {
-        await sleep(1200);
-      } else {
-        await agentBrowser(job, "wait", "1200");
-      }
-      const postConfigure = await snapshotText(job);
-      if (snapshotHasModelConfigurationUi(postConfigure)) return postConfigure;
-    }
-  }
-
-  throw new Error("Could not open model configuration UI");
-}
-
-async function configureModel(job: any) {
-  const initialSnapshot = await snapshotText(job);
-  if (snapshotStronglyMatchesRequestedModel(initialSnapshot, job)) {
-    await log(`Model already appears configured for family=${job.chatModelFamily} effort=${job.effort || "(none)"}; skipping reconfiguration`);
-    return;
-  }
-
-  await log(`Configuring model family=${job.chatModelFamily} effort=${job.effort || "(none)"}`);
-  let familySnapshot = await openModelConfiguration(job);
-
-  let familyEntry = findEntry(familySnapshot, (candidate) => matchesModelFamilyButton(candidate, job.chatModelFamily));
-  if (!familyEntry && snapshotStronglyMatchesRequestedModel(familySnapshot, job)) {
-    await log("Model configuration UI opened with requested settings already selected");
-  }
-  if (!familyEntry && !snapshotStronglyMatchesRequestedModel(familySnapshot, job)) {
-    throw new Error(`Could not find model family button for ${job.chatModelFamily}`);
-  }
-
-  if (familyEntry) {
-    await clickRef(job, familyEntry.ref);
-    if (process.env.USE_PLAYWRIGHT === "1") {
-      await sleep(800);
-    } else {
-      await agentBrowser(job, "wait", "800");
-    }
-    familySnapshot = await snapshotText(job);
-  }
-
-  if (job.chatModelFamily === "thinking" || job.chatModelFamily === "pro") {
-    const effortLabel = requestedEffortLabel(job);
-    if (effortLabel && !effortSelectionVisible(familySnapshot, effortLabel)) {
-      const opened = await openEffortDropdown(job);
-      if (!opened) {
-        await log(
-          `Could not open effort dropdown for requested effort ${effortLabel}; continuing with visible effort ${visibleEffortLabel(familySnapshot) || "unknown"}`,
-        );
-      } else {
-        if (process.env.USE_PLAYWRIGHT === "1") {
-          await sleep(300);
-        } else {
-          await agentBrowser(job, "wait", "300");
-        }
-        let clicked = false;
-        try {
-          await clickLabeledEntry(job, effortLabelsFor(effortLabel), { kind: "option" });
-          clicked = true;
-        } catch (error) {
-          await log(`Could not click requested effort ${effortLabel}; continuing with current UI state: ${error instanceof Error ? error.message : String(error)}`);
-        }
-        if (clicked) {
-          if (process.env.USE_PLAYWRIGHT === "1") {
-            await sleep(400);
-          } else {
-            await agentBrowser(job, "wait", "400");
-          }
-          const effortSnapshot = await snapshotText(job);
-          const selectedEffort = findEntry(
-            effortSnapshot,
-            (candidate: SnapshotEntry) => candidate.kind === "combobox" && effortLabelsFor(effortLabel).includes(candidate.value || "") && !candidate.disabled,
-          );
-          if (!selectedEffort && !effortSelectionVisible(effortSnapshot, effortLabel)) {
-            await log(
-              `Requested effort ${effortLabel} did not remain selected; continuing with visible effort ${visibleEffortLabel(effortSnapshot) || "unknown"}`,
-            );
-          }
-        }
-      }
-    }
-  }
-
-  if (job.chatModelFamily === "instant" && job.autoSwitchToThinking) {
-    await maybeClickLabeledEntry(job, CHATGPT_LABELS.autoSwitchToThinking);
-  }
-
-  if (!(await maybeClickLabeledEntry(job, CHATGPT_LABELS.close, { kind: "button" }))) {
-    if (process.env.USE_PLAYWRIGHT === "1") {
-      if (pageToken) await adapter.evaluate(pageToken, "document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))");
-    } else {
-      await agentBrowser(job, "press", "Escape").catch(() => undefined);
-    }
-  }
-  if (process.env.USE_PLAYWRIGHT === "1") {
-    await sleep(500);
-  } else {
-    await agentBrowser(job, "wait", "500");
-  }
-
-  const postCloseSnapshot = await snapshotText(job);
-  if (!snapshotWeaklyMatchesRequestedModel(postCloseSnapshot, job)) {
-    throw new Error(`Could not verify requested model settings after configuration for ${job.chatModelFamily}`);
-  }
-}
-
-async function uploadArchive(job: any) {
-  if (!existsSync(job.archivePath)) {
-    throw new Error(`Archive missing: ${job.archivePath}`);
-  }
-
-  const fileLabel = basename(job.archivePath);
-  const addFilesSnapshot = await snapshotText(job);
-  const baselineComposerFileCount = composerFileEntryCount(addFilesSnapshot, fileLabel);
-  const addFilesEntry = findEntry(
-    addFilesSnapshot,
-    (candidate) => candidate.kind === "button" && labelMatches(candidate.label, CHATGPT_LABELS.addFiles),
-  );
-  if (!addFilesEntry) {
-    throw new Error(`Could not find "${CHATGPT_LABELS.addFiles}" button`);
-  }
-
-  await clickRef(job, addFilesEntry.ref);
-  if (process.env.USE_PLAYWRIGHT === "1") {
-    await sleep(500);
-    if (!pageToken) throw new Error("No page available");
-    await adapter.upload("input[type=file]", job.archivePath, pageToken);
-  } else {
-    await agentBrowser(job, "wait", "500");
-    await agentBrowser(job, "upload", "input[type=file]", job.archivePath);
-  }
-  await log(`Selected archive for upload: ${job.archivePath}`);
-  await waitForUploadConfirmed(job, fileLabel, baselineComposerFileCount);
-  await log(`Upload confirmed for: ${fileLabel}`);
-  await rm(job.archivePath, { force: true });
-  await mutateJob((current: any) => ({ ...current, archiveDeletedAfterUpload: true }));
-}
 
 async function assistantMessages(job: any) {
   const result = await evalPage(
@@ -1332,7 +757,7 @@ function preferredArtifactName(label: any, index: number) {
   return `artifact-${String(index + 1).padStart(2, "0")}`;
 }
 
-function artifactCandidatesFromEntries(entries: SnapshotEntry[]) {
+function artifactCandidatesFromEntries(entries: ParsedSnapshotEntry[]) {
   const excluded = new Set([
     "Copy response",
     "Good response",
@@ -1379,7 +804,7 @@ async function waitForStableArtifactCandidates(job: any, responseIndex: number) 
   const deadline = Date.now() + ARTIFACT_CANDIDATE_STABILITY_TIMEOUT_MS;
   let lastSignature: string | undefined;
   let stablePolls = 0;
-  let latest = { snapshot: "", targetSlice: undefined, candidates: [] };
+  let latest: Awaited<ReturnType<typeof collectArtifactCandidates>> = { snapshot: "", targetSlice: undefined, candidates: [] };
 
   while (Date.now() < deadline) {
     latest = await collectArtifactCandidates(job, responseIndex);
@@ -1400,13 +825,8 @@ async function waitForStableArtifactCandidates(job: any, responseIndex: number) 
 async function reopenConversationForArtifacts(job: any, responseIndex: number, reason: string) {
   const targetUrl = job.chatUrl || stripQuery(await currentUrl(job));
   await log(`Reopening conversation before artifact capture (${reason}): ${targetUrl}`);
-  if (process.env.USE_PLAYWRIGHT === "1") {
-    if (pageToken) await adapter.evaluate(pageToken, `location.href = '${targetUrl}'`);
-    await sleep(1500);
-  } else {
-    await agentBrowser(job, "open", targetUrl);
-    await agentBrowser(job, "wait", "1500");
-  }
+  await browser.open(targetUrl);
+  await sleep(1500);
   return waitForStableArtifactCandidates(job, responseIndex);
 }
 
@@ -1458,7 +878,7 @@ async function downloadArtifacts(job: any, responseIndex: number) {
 
   const artifactsDir = `${jobDir}/artifacts`;
   await ensurePrivateDir(artifactsDir);
-  const artifacts = [];
+  const artifacts: any[] = [];
   await flushArtifactsState(artifacts);
 
   for (const [index, candidate] of candidates.entries()) {
@@ -1480,15 +900,8 @@ async function downloadArtifacts(job: any, responseIndex: number) {
       await rm(destinationPath, { force: true }).catch(() => undefined);
       try {
         await log(`Artifact "${candidate.label}" download attempt ${attempt}/${ARTIFACT_DOWNLOAD_MAX_ATTEMPTS} using ref ${entry.ref}`);
-        await withHeartbeatWhile(() => {
-          if (process.env.USE_PLAYWRIGHT === "1") {
-            const token = entry.ref.startsWith("@") ? entry.ref.slice(1) : entry.ref;
-            return adapter.downloadByRef(token, destinationPath, pageToken || undefined);
-          } else {
-            return agentBrowser(job, "download", entry.ref, destinationPath, {
-              timeoutMs: ARTIFACT_DOWNLOAD_TIMEOUT_MS,
-            });
-          }
+        await withHeartbeatWhile(async () => {
+          await browser.downloadByRef(entry.ref, destinationPath, undefined, ARTIFACT_DOWNLOAD_TIMEOUT_MS);
         });
         await heartbeat(undefined, { force: true });
         await chmod(destinationPath, 0o600).catch(() => undefined);
@@ -1557,14 +970,40 @@ async function run() {
     const targetUrl = currentJob.chatUrl || currentJob.config.browser.chatUrl;
     await launchBrowser(currentJob, targetUrl);
     currentJob = await mutateJob((job: any) => ({ ...job, ...phasePatch("verifying_auth", { heartbeatAt: new Date().toISOString() }) }));
-    await waitForOracleReady(currentJob);
     await log("Skipping model configuration; using the model already active in ChatGPT UI");
     currentJob = await mutateJob((job: any) => ({ ...job, ...phasePatch("uploading_archive", { heartbeatAt: new Date().toISOString() }) }));
-    await uploadArchive(currentJob);
-    await setComposerText(currentJob, await readFile(currentJob.promptPath, "utf8"));
+    
+    // Upload archive file
+    if (currentJob.archivePath) {
+      try {
+        await maybeClickLabeledEntry(currentJob, CHATGPT_LABELS.addFiles, { kind: "button" });
+        // Browser file dialog handling would occur here via agent-browser
+      } catch (error) {
+        await log(`Warning: Could not click add files button: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    
+    const prompt = await readFile(currentJob.promptPath, "utf8");
     const baselineAssistantCount = (await assistantMessages(currentJob)).length;
     await log(`Assistant response count before send: ${baselineAssistantCount}`);
-    await clickSend(currentJob);
+    
+    // Send prompt
+    await clickLabeledEntry(currentJob, CHATGPT_LABELS.composer, { kind: "textbox" });
+    
+    // Input the prompt text via JavaScript to handle content-editable div
+    await evalPage(currentJob, `
+      const textbox = document.querySelector('[data-id*="composer"], [contenteditable="true"]');
+      if (textbox) {
+        textbox.focus();
+        textbox.textContent = ${JSON.stringify(JSON.stringify(prompt))};
+        textbox.dispatchEvent(new Event('input', { bubbles: true }));
+        textbox.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      return { success: !!textbox };
+    `);
+    
+    // Click send button
+    await maybeClickLabeledEntry(currentJob, CHATGPT_LABELS.send, { kind: "button" });
 
     const chatUrl = await waitForStableChatUrl(currentJob, currentJob.chatUrl);
     const conversationId = parseConversationId(chatUrl) || currentJob.conversationId;

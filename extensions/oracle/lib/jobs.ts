@@ -4,9 +4,9 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import type { OracleConfig, OracleEffort, OracleModelFamily } from "./config.js";
-import { withJobLock } from "./locks.js";
-import { cleanupRuntimeArtifacts, getProjectId, getSessionId, parseConversationId, type OracleCleanupReport } from "./runtime.js";
+import type { OracleConfig, OracleEffort, OracleModelFamily } from "./config";
+import { withJobLock } from "./locks";
+import { cleanupRuntimeArtifacts, getProjectId, getSessionId, parseConversationId, type OracleCleanupReport } from "./runtime";
 
 export type OracleJobStatus = "preparing" | "submitted" | "waiting" | "complete" | "failed" | "cancelled";
 export type OracleJobPhase =

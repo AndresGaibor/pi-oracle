@@ -4,20 +4,20 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@mariozechner/pi-coding-agent";
-import { registerOracleCommands } from "./lib/commands.js";
-import { loadOracleConfig } from "./lib/config.js";
+import { registerOracleCommands } from "./lib/commands";
+import { loadOracleConfig } from "./lib/config";
 import {
 	pruneTerminalOracleJobs,
 	reconcileStaleOracleJobs,
-} from "./lib/jobs.js";
-import { isLockTimeoutError, withGlobalReconcileLock } from "./lib/locks.js";
+} from "./lib/jobs";
+import { isLockTimeoutError, withGlobalReconcileLock } from "./lib/locks";
 import {
 	refreshOracleStatus,
 	startPoller,
 	stopPoller,
 	stopPollerForSession,
-} from "./lib/poller.js";
-import { registerOracleTools } from "./lib/tools.js";
+} from "./lib/poller";
+import { registerOracleTools } from "./lib/tools";
 
 export default function oracleExtension(pi: ExtensionAPI) {
 	const extensionDir = dirname(fileURLToPath(import.meta.url));

@@ -1,10 +1,16 @@
 // pages/base.page.ts - Base Page Object Model class
-import type { Page } from "playwright";
+
+import {
+	parseSnapshotEntries,
+	findEntry,
+	findLastEntry,
+	type ParsedSnapshotEntry,
+} from "../shared/snapshot-utils";
 
 export interface SnapshotEntry {
 	ref: string;
-	kind: string;
-	label: string;
+	kind?: string;
+	label?: string;
 	disabled?: boolean;
 	checked?: boolean;
 	href?: string;
@@ -12,113 +18,140 @@ export interface SnapshotEntry {
 	placeholder?: string;
 }
 
-export class BasePage {
-	protected pageToken: string = "";
-
-	// ---- Navigation ----
-	async navigate(url: string): Promise<void> {
-		// To be implemented by adapter
-		console.log(`Navigating to: ${url}`);
-	}
-
-	async getCurrentUrl(): Promise<string> {
-		return "";
-	}
-
-	// ---- Snapshots (accessibility tree) ----
-	async getSnapshot(): Promise<SnapshotEntry[]> {
-		return [];
-	}
-
-	protected parseSnapshot(raw: string): SnapshotEntry[] {
-		const entries: SnapshotEntry[] = [];
-		const lines = raw.split("\n");
-
-		for (const line of lines) {
-			const tokenMatch = line.match(/^(\w+)\s*>\s*(.*)/);
-			if (!tokenMatch) continue;
-
-			const ref = tokenMatch[1];
-			const rest = tokenMatch[2].trim();
-
-			const kindMatch = rest.match(
-				/^(button|link|textbox|heading|img|checkbox|radio|listbox|option|combobox|dialog|alert|banner|navigation|main|search|form|article|section|nav)(.*)/i,
-			);
-			const kind = kindMatch ? kindMatch[1].toLowerCase() : "text";
-
-			const labelMatch = rest.match(/"([^"]+)"/);
-			const label = labelMatch ? labelMatch[1] : rest.replace(/"/g, "").trim();
-
-			const hrefMatch = rest.match(/href="([^"]+)"/);
-
-			entries.push({
-				ref,
-				kind,
-				label,
-				href: hrefMatch?.[1],
-			});
-		}
-		return entries;
-	}
-
-	async findEntry(
-		predicate: (e: SnapshotEntry) => boolean,
-	): Promise<SnapshotEntry | undefined> {
-		const entries = await this.getSnapshot();
-		return entries.find(predicate);
-	}
-
-	async findLastEntry(
-		predicate: (e: SnapshotEntry) => boolean,
-	): Promise<SnapshotEntry | undefined> {
-		const entries = await this.getSnapshot();
-		const matches = entries.filter(predicate);
-		return matches[matches.length - 1];
-	}
-
-	// ---- Interaction ----
-	async click(entryOrRef: SnapshotEntry | string): Promise<void> {
-		const ref = typeof entryOrRef === "string" ? entryOrRef : entryOrRef.ref;
-		console.log(`Clicking: ${ref}`);
-	}
-
-	async type(selector: string, text: string, human = true): Promise<void> {
-		if (human) {
-			await this.humanType(selector, text);
-		} else {
-			await this.fill(selector, text);
-		}
-	}
-
-	protected async humanType(selector: string, text: string): Promise<void> {
-		console.log(`Human typing: ${text.slice(0, 20)}...`);
-		// Type character by character with human-like delays
-		for (const char of text) {
-			const baseDelay = 30 + Math.random() * 120;
-			const pause = Math.random() < 0.05 ? 200 + Math.random() * 300 : 0;
-			await new Promise((r) => setTimeout(r, baseDelay + pause));
-		}
-	}
-
-	protected async fill(selector: string, value: string): Promise<void> {
-		console.log(`Filling: ${selector}`);
-	}
-
-	// ---- Diagnostic ----
-	async takeScreenshot(path: string): Promise<void> {
-		console.log(`Screenshot: ${path}`);
-	}
-
-	async getPageText(): Promise<string> {
-		return "";
-	}
+/**
+ * BrowserActions – the contract between Page Objects and the browser infrastructure layer.
+ * Page Objects depend ONLY on this interface, not on any concrete implementation.
+ */
+export interface BrowserActions {
+	/** Get snapshot text of the current page */
+	snapshotText(pageId?: string): Promise<string>;
+	/** Get body innerText of the current page */
+	pageText(pageId?: string): Promise<string>;
+	/** Evaluate a script in the page context */
+	evaluate(pageId: string, script: string): Promise<unknown>;
+	/** Click an element by ref token or selector */
+	clickRef(refOrToken: string, pageIdHint?: string): Promise<void>;
+	/** Fill text into an element */
+	fill(refOrToken: string, text: string, pageIdHint?: string): Promise<void>;
+	/** Take a screenshot */
+	screenshot(destPath: string, pageId?: string): Promise<void>;
+	/** Get the main page ID for evaluation */
+	getMainPageId(): string;
+	/** Open a URL in the main page */
+	open?(url: string): Promise<void>;
+	/** Reload the page */
+	reload?(pageId?: string): Promise<void>;
+	/** Get current URL */
+	getUrl?(pageId?: string): Promise<string>;
 }
 
-// Helper functions
-export function labelMatches(
-	actual: string,
-	candidates: readonly string[],
-): boolean {
-	const normalized = actual.toLowerCase().trim();
-	return candidates.some((c) => normalized.includes(c.toLowerCase()));
+/**
+ * BasePage – Pure Page Object Model base class.
+ * Provides snapshot parsing and query utilities that work with any BrowserActions implementation.
+ */
+export class BasePage {
+	/**
+	 * Find entry in snapshot by predicate
+	 */
+	protected findEntry(
+		snapshot: string,
+		predicate: (e: SnapshotEntry) => boolean,
+	): SnapshotEntry | undefined {
+		const entry = findEntry(snapshot, (e: ParsedSnapshotEntry) =>
+			predicate({
+				ref: e.ref,
+				kind: e.kind,
+				label: e.label,
+				disabled: e.disabled,
+				checked: e.checked,
+				href: e.href,
+				value: e.value,
+				placeholder: e.placeholder,
+			}),
+		);
+		return entry
+			? {
+					ref: entry.ref,
+					kind: entry.kind,
+					label: entry.label,
+					disabled: entry.disabled,
+					checked: entry.checked,
+					href: entry.href,
+					value: entry.value,
+					placeholder: entry.placeholder,
+				}
+			: undefined;
+	}
+
+	/**
+	 * Find last entry in snapshot by predicate
+	 */
+	protected findLastEntry(
+		snapshot: string,
+		predicate: (e: SnapshotEntry) => boolean,
+	): SnapshotEntry | undefined {
+		const entry = findLastEntry(snapshot, (e: ParsedSnapshotEntry) =>
+			predicate({
+				ref: e.ref,
+				kind: e.kind,
+				label: e.label,
+				disabled: e.disabled,
+				checked: e.checked,
+				href: e.href,
+				value: e.value,
+				placeholder: e.placeholder,
+			}),
+		);
+		return entry
+			? {
+					ref: entry.ref,
+					kind: entry.kind,
+					label: entry.label,
+					disabled: entry.disabled,
+					checked: entry.checked,
+					href: entry.href,
+					value: entry.value,
+					placeholder: entry.placeholder,
+				}
+			: undefined;
+	}
+
+	/**
+	 * Parse raw snapshot into structured entries
+	 */
+	protected parseSnapshot(raw: string): SnapshotEntry[] {
+		const parsed = parseSnapshotEntries(raw);
+		return parsed.map((p) => ({
+			ref: p.ref,
+			kind: p.kind,
+			label: p.label,
+			disabled: p.disabled,
+			checked: p.checked,
+			href: p.href,
+			value: p.value,
+			placeholder: p.placeholder,
+		}));
+	}
+
+	/**
+	 * Check if label matches any candidate
+	 */
+	protected labelMatches(actual: string, candidates: readonly string[]): boolean {
+		const normalized = actual.toLowerCase().trim();
+		return candidates.some((c) => normalized.includes(c.toLowerCase()));
+	}
+
+	/**
+	 * Find entries by kind
+	 */
+	protected filterByKind(snapshot: string, kind: string): SnapshotEntry[] {
+		return this.parseSnapshot(snapshot).filter((e) => e.kind === kind);
+	}
+
+	/**
+	 * Find enabled entries
+	 */
+	protected enabledOnly(entries: SnapshotEntry[]): SnapshotEntry[] {
+		return entries.filter((e) => !e.disabled);
+	}
 }

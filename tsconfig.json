@@ -13,7 +13,6 @@
 	},
 	"include": [
 		"extensions/**/*.ts",
-		"adapter/**/*.ts",
 		"scripts/**/*.ts",
 		"stubs/**/*.ts"
 	],

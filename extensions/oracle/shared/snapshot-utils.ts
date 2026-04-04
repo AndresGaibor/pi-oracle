@@ -1,5 +1,5 @@
 // shared/snapshot-utils.ts - Snapshot parsing utilities (extracted from workers)
-import type { SnapshotEntry } from "../pages/base.page.js";
+import type { SnapshotEntry } from "../pages/base.page";
 
 export interface ParsedSnapshotEntry {
 	line: string;

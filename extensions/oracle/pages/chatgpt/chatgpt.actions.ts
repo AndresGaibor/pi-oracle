@@ -1,0 +1,114 @@
+/**
+ * ChatGPT Actions – browser interactions for the ChatGPT page.
+ * Each method performs a concrete action using the BrowserActions interface.
+ */
+import type { BrowserActions } from "../browser-actions.types";
+import { CHATGPT_SELECTORS, CHATGPT_LABELS, labelMatches } from "./chatgpt.selectors";
+
+// ---------------------------------------------------------------------------
+// Composer actions
+// ---------------------------------------------------------------------------
+
+/** Click the composer textbox to focus it */
+export async function clickComposer(browser: BrowserActions): Promise<void> {
+	const snapshot = await browser.snapshotText();
+	const entry = findLabeledEntry(snapshot, "textbox", CHATGPT_LABELS.composer);
+	if (!entry) throw new Error("Composer textbox not found in snapshot");
+	await browser.clickRef(entry.ref);
+}
+
+/** Type a prompt into the composer via JS (handles contenteditable) */
+export async function typePrompt(browser: BrowserActions, prompt: string): Promise<boolean> {
+	const result = await browser.evaluate(browser.getMainPageId(), `
+		const textbox = document.querySelector('${CHATGPT_SELECTORS.composer[3]}')
+			|| document.querySelector('${CHATGPT_SELECTORS.composer[4]}');
+		if (textbox) {
+			textbox.focus();
+			textbox.textContent = ${JSON.stringify(JSON.stringify(prompt))};
+			textbox.dispatchEvent(new Event('input', { bubbles: true }));
+			textbox.dispatchEvent(new Event('change', { bubbles: true }));
+		}
+		return { success: !!textbox };
+	`);
+	return !!(result && typeof result === "object" && "success" in result && result.success);
+}
+
+// ---------------------------------------------------------------------------
+// Send actions
+// ---------------------------------------------------------------------------
+
+/** Click the send button */
+export async function clickSend(browser: BrowserActions): Promise<void> {
+	const snapshot = await browser.snapshotText();
+	const entry = findLabeledEntry(snapshot, "button", CHATGPT_LABELS.send);
+	if (!entry) throw new Error("Send button not found in snapshot");
+	await browser.clickRef(entry.ref);
+}
+
+// ---------------------------------------------------------------------------
+// File upload actions
+// ---------------------------------------------------------------------------
+
+/** Click the add files button */
+export async function clickAddFiles(browser: BrowserActions): Promise<boolean> {
+	const snapshot = await browser.snapshotText();
+	const entry = findLabeledEntry(snapshot, "button", CHATGPT_LABELS.addFiles);
+	if (!entry) return false;
+	await browser.clickRef(entry.ref);
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Model configuration actions
+// ---------------------------------------------------------------------------
+
+/** Click the close button in model config panel */
+export async function clickClose(browser: BrowserActions): Promise<boolean> {
+	const snapshot = await browser.snapshotText();
+	const entry = findLabeledEntry(snapshot, "button", CHATGPT_LABELS.close);
+	if (!entry) return false;
+	await browser.clickRef(entry.ref);
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Utility: find labeled entry in snapshot
+// ---------------------------------------------------------------------------
+
+interface SnapshotEntry {
+	ref: string;
+	kind?: string;
+	label?: string;
+	disabled?: boolean;
+	value?: string;
+}
+
+function parseSnapshotEntries(snapshot: string): SnapshotEntry[] {
+	return snapshot
+		.split("\n")
+		.map((line) => {
+			const refMatch = line.match(/\bref=(e\d+|@e\d+)\b/);
+			if (!refMatch) return undefined;
+			const kindMatch = line.match(/^\s*-\s*([^\s]+)/);
+			const quotedMatch = line.match(/"([^"]*)"/);
+			const valueMatch = line.match(/:\s*(.+)$/);
+			return {
+				ref: refMatch[1].startsWith("@") ? refMatch[1] : `@${refMatch[1]}`,
+				kind: kindMatch ? kindMatch[1] : undefined,
+				label: quotedMatch ? quotedMatch[1] : undefined,
+				value: valueMatch ? valueMatch[1].trim() : undefined,
+				disabled: /\bdisabled\b/.test(line),
+			};
+		})
+		.filter(Boolean) as SnapshotEntry[];
+}
+
+function findLabeledEntry(
+	snapshot: string,
+	kind: string,
+	labels: readonly string[],
+): SnapshotEntry | undefined {
+	return parseSnapshotEntries(snapshot).find(
+		(e) => e.kind === kind && labelMatches(e.label, labels) && !e.disabled,
+	);
+}
