@@ -18,7 +18,7 @@ Pure Playwright module that provides:
 
 ### Workers
 
-- **`worker/run-job.ts`** — Main job execution. Uses Playwright directly for all browser operations.
+- **`worker/run-oracle-job.ts`** — Main job execution. Uses Playwright directly for all browser operations.
 - **`worker/auth-bootstrap.ts`** — Authentication bootstrap. Uses Playwright for browser auth flow.
 
 ### How it works

@@ -1,236 +1,266 @@
-# Arquitectura de Cookies - pi-oracle
+# Arquitectura de pi-oracle
 
-## 📁 Estructura correcta
+## Visión General
+
+Pi-oracle es una extensión para el agente de codificación **pi** que automatiza interacciones con proveedores de IA (ChatGPT, y futuramente Claude, Gemini, etc.) mediante Playwright. Su arquitectura sigue el principio de **Dependency Inversion**: las capas superiores (worker, jobs) dependen de abstracciones (`AIProviderPage`), no de implementaciones concretas (`ChatGPTPage`).
+
+## Capas de Arquitectura
+
+```
+┌─────────────────────────────────────────────┐
+│              Extension Entry                │
+│              index.ts                       │
+│  Registra comandos, tools, pollers en pi   │
+└──────────────────┬──────────────────────────┘
+                   │
+┌──────────────────▼──────────────────────────┐
+│              Worker Layer                   │
+│              worker/run-oracle-job.ts       │
+│  Proceso aislado que ejecuta jobs          │
+│  Usa createProviderPage() (factory)        │
+└──────────────────┬──────────────────────────┘
+                   │
+┌──────────────────▼──────────────────────────┐
+│              Job Runner                     │
+│              lib/ai-job-runner.ts           │
+│  Orquestación: launch → auth → send → wait │
+│  Delega a ArtifactDownloader, ModelConfig  │
+└──────────────────┬──────────────────────────┘
+                   │
+┌──────────────────▼──────────────────────────┐
+│         Provider Abstraction                │
+│         pages/ai-provider.types.ts          │
+│  Interfaz AIProviderPage (contrato)        │
+│  Factory: createProviderPage()             │
+└──────────────────┬──────────────────────────┘
+                   │
+        ┌──────────┴──────────┐
+        ▼                     ▼
+┌───────────────┐    ┌───────────────┐
+│  ChatGPT      │    │  Claude       │
+│  Provider     │    │  (futuro)     │
+│               │    │               │
+│  pages/       │    │  pages/       │
+│  chatgpt/     │    │  claude/      │
+│  .selectors   │    │  .selectors   │
+│  .actions     │    │  .actions     │
+│  .assertions  │    │  .assertions  │
+│  .page        │    │  .page        │
+└───────────────┘    └───────────────┘
+```
+
+## Estructura del Código
 
 ```
 extensions/oracle/
+├── index.ts                      # Entry point de la extensión
 ├── lib/
-│   └── cookies.ts              ← 🎯 MÓDULO PRINCIPAL
-│                                  Todas las funciones de cookies
-│                                  Usable en toda la extensión
-├── worker/
-│   ├── auth-bootstrap.ts       ← Usa lib/cookies.ts
-│   └── auth-cookie-policy.ts   ← Re-exporta de lib/cookies.ts
-│
-scripts/                        ← Solo para debugging/testing
-├── debug-headed.ts             ← Test manual con browser
-├── test-cookies.ts             ← Tests automatizados
-└── watch-cookies.ts            ← Monitor en tiempo real
+│   ├── ai-job-runner.ts          # Orquestador del ciclo de vida del job
+│   ├── browser-detection.ts      # Detección auto de navegador (4 capas)
+│   ├── browser.ts                # Lanzamiento y configuración del browser
+│   ├── commands.ts               # Registro de comandos (/oracle, etc.)
+│   ├── config.ts                 # OracleConfig y validación
+│   ├── constants.ts              # Constantes nombradas (timeouts, etc.)
+│   ├── cookie-paths.ts           # Rutas de cookies por plataforma
+│   ├── cookies.ts                # Lectura y filtrado de cookies
+│   ├── jobs.ts                   # Definición de OracleJob
+│   ├── locks.ts                  # Exclusión mutua por conversación
+│   ├── poller.ts                 # Polling de estado para jobs
+│   ├── runtime.ts                # Configuración de runtime del agente
+│   └── tools.ts                  # Tools del agente (oracle_submit, etc.)
+├── pages/
+│   ├── ai-provider.types.ts      # Interfaz AIProviderPage (contrato)
+│   ├── base.page.ts              # Clase base abstracta para POM
+│   ├── browser-actions.types.ts  # Interfaz BrowserActions
+│   ├── provider-factory.ts       # Factory pattern para proveedores
+│   └── chatgpt/
+│       ├── chatgpt.selectors.ts  # Selectores CSS/data-testid
+│       ├── chatgpt.actions.ts    # Funciones puras de acción
+│       ├── chatgpt.assertions.ts # Funciones puras de aserción
+│       ├── chatgpt.page.ts       # Page Object principal
+│       ├── chatgpt-auth.selectors.ts
+│       ├── chatgpt-auth.actions.ts
+│       ├── chatgpt-auth.assertions.ts
+│       └── chatgpt-auth.page.ts  # Auth page para ChatGPT
+├── shared/
+│   ├── login-utils.ts            # Clasificación de páginas de login
+│   ├── login-probe-types.ts      # Tipado para login probe
+│   ├── snapshot-utils.ts         # Parser de snapshots de accesibilidad
+│   └── spawn-utils.ts            # Utilidades para spawn de procesos
+└── worker/
+    ├── run-oracle-job.ts         # Entry point del worker
+    ├── auth-bootstrap.ts         # Bootstrap de autenticación
+    └── auth-cookie-policy.ts     # Política de cookies (re-export)
 ```
 
-## ✅ Arquitectura correcta
+## Módulos Clave
 
-### Módulo principal: `extensions/oracle/lib/cookies.ts`
+### `lib/ai-job-runner.ts`
 
-Este es el **único** archivo que contiene la lógica de cookies:
+Orquesta el ciclo de vida completo de un job: lanza el navegador, verifica autenticación, envía el prompt, espera la respuesta, extrae el texto y descarga artefactos. Delega tareas especializadas a:
+
+- **`ArtifactDownloader`** — Detección y descarga de archivos generados
+- **`ModelConfigurator`** — Selección de modelo y configuración de effort
+
+### `lib/browser-detection.ts`
+
+Detecta automáticamente el navegador instalado en la plataforma actual (macOS, Linux, Windows). Sigue una **estrategia de 4 capas** con fallback:
+
+1. Configuration explícita (`config.browser.executablePath`)
+2. Variable de entorno (`BROWSER_PATH`, `ORACLE_BROWSER_PATH`)
+3. Auto-detección basada en preferencia de plataforma (Brave → Chrome → Edge → Chromium)
+4. Chromium bundled de Playwright
+
+### `lib/cookie-paths.ts`
+
+Detecta las rutas de cookies del navegador según la plataforma y el browser. Soporta:
+
+- **macOS:** `~/Library/Application Support/BraveBrowser/Default/Cookies`
+- **Linux:** `~/.config/BraveSoftware/Brave-Browser/Default/Cookies` (incluyendo Flatpak)
+- **Windows:** `%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\Default\Network\Cookies`
+
+### `lib/constants.ts`
+
+Constantes nombradas para timeouts, intervals, umbrales y límites. Evita constantes mágicas en el código. Ejemplo:
 
 ```typescript
-// ✅ CORRECTO - Importar desde lib/cookies.ts
-import { readChatGPTCookies, filterImportableAuthCookies } from "../lib/cookies";
+export const RESPONSE_POLL_INTERVAL_MS = 2_000;
+export const RESPONSE_TIMEOUT_MS = 120_000;
+export const AUTH_TRANSITION_TIMEOUT_MS = 30_000;
 ```
 
-**Funciones disponibles:**
-- `readCookiesFromBrowser()` - Lee cookies con sweet-cookie
-- `readChatGPTCookies()` - Lee y filtra cookies de ChatGPT
-- `filterImportableAuthCookies()` - Filtra cookies de autenticación
-- `ensureAccountCookie()` - Sintetiza `_account` si falta
-- `normalizeImportedCookie()` - Normaliza formato
-- `classifyImportedCookie()` - Clasifica cookie
+### `pages/ai-provider.types.ts`
 
-**Constantes:**
-- `CHATGPT_COOKIE_ORIGINS`
-- `AUTH_COOKIE_NAME_PATTERNS`
-- `DROPPED_COOKIE_NAME_PATTERNS`
+Define la interfaz `AIProviderPage` que todos los proveedores de IA deben implementar. Esta es la **clave de la arquitectura de swap de proveedor**. Incluye:
 
-### Worker compatibility: `extensions/oracle/worker/auth-cookie-policy.ts`
+- `AIProviderConfig` — Configuración necesaria
+- `AIProviderResult` — Resultado de la interacción
+- `ArtifactEntry` — Artefactos generados
+- `ClassifyParams` / `ClassifyResult` — Clasificación de estado de página
+- `WaitOpts` — Opciones de espera para polling
 
-Re-exporta desde `lib/cookies.ts` para mantener compatibilidad:
+### `pages/provider-factory.ts`
+
+Factory pattern que retorna la implementación correcta de `AIProviderPage` según la URL del chat configurada. Agregar un nuevo proveedor solo requiere registrarlo aquí.
+
+### `pages/base.page.ts`
+
+Clase base abstracta para todos los Page Objects. Proporciona métodos comunes de snapshot y delegación a browser actions.
+
+### `shared/snapshot-utils.ts`
+
+Funciones puras (`@pure`) para parsear snapshots de accesibilidad de Playwright. Es la base de todos los assertions y detecciones de estado. Incluye:
+
+- `parseSnapshotEntries()` — Parsea snapshot de Playwright en array estructurado
+- `findLabeledEntry()` — Busca una entrada por label exacto
+- `hasEntry()` — Verifica existencia de una entrada
+- `classifyPage()` — Clasificación genérica basada en snapshots
+
+## Patrones de Diseño
+
+### Page Object Model (POM)
+
+Cada proveedor de IA tiene **4 archivos** separados por responsabilidad:
+
+| Archivo | Responsabilidad | Ejemplo |
+|---------|----------------|---------|
+| `.selectors.ts` | Selectores CSS, `data-testid`, labels (fuente única) | `chatgpt.selectors.ts` |
+| `.actions.ts` | Funciones puras de acción (reciben `BrowserActions`) | `chatgpt.actions.ts` |
+| `.assertions.ts` | Funciones puras de aserción (reciben snapshot string) | `chatgpt.assertions.ts` |
+| `.page.ts` | Page Object principal (extiende `BasePage`, delega) | `chatgpt.page.ts` |
+
+La separación de archivos permite:
+- Testear actions y assertions de forma unitaria (sin navegador)
+- Reutilizar funciones puras fuera del contexto de page
+- Mantener selectores como fuente única de verdad
+
+### Factory Pattern
+
+`createProviderPage()` encapsula la lógica de selección de proveedor:
 
 ```typescript
-// Para compatibilidad con código existente
-export {
-  filterImportableAuthCookies,
-  ensureAccountCookie,
-  // ...
-} from "../lib/cookies";
+const page = createProviderPage(config.chatUrl);
+// Retorna ChatGPTPage si chatUrl es "https://chatgpt.com"
+// Retorna ClaudePage si se registra "https://claude.ai"
 ```
 
-### Workers: `extensions/oracle/worker/auth-bootstrap.ts`
+### Dependency Inversion
 
-Usa sweet-cookie + lib/cookies:
+Las capas superiores (worker, job runner, extensión) dependen de `AIProviderPage` (abstracción), no de `ChatGPTPage` (implementación). Esto permite:
 
-```typescript
-import { getCookies } from "@steipete/sweet-cookie";
-import { ensureAccountCookie, filterImportableAuthCookies } from "./auth-cookie-policy";
+- Agregar Claude sin modificar el worker
+- Agregar Gemini sin modificar el job runner
+- Hacer mock del provider en tests
 
-// Lee cookies con sweet-cookie
-const { cookies, warnings } = await getCookies({
-  url: config.browser.chatUrl,
-  origins: CHATGPT_COOKIE_ORIGINS,
-  browsers: ["chrome"],
-  chromeProfile: cookieSource(),
-});
+### Strategy Pattern
 
-// Filtra usando lib/cookies
-const filtered = filterImportableAuthCookies(cookies, config.browser.chatUrl);
-```
+1. **Detección de browser:** 4 capas con fallback (config → env → auto → bundled)
+2. **Clasificación de página:** varía por proveedor (`classifyChatGPTPage`, `classifyClaudePage`)
+3. **Estrategia de envío:** Enter-first (evita buscar botones "camaleónicos")
 
-### Scripts: Solo para debugging
+## Convenciones
 
-```bash
-# Test de cookies
-bun run test:cookies
+### Selectores
 
-# Debug con browser
-bun run debug:headed
+**Usar SIEMPRE:**
+- `data-testid` (prioritario, estables entre deploys)
+- Atributos semánticos (`aria-label`, `data-message-author-role`, etc.)
+- IDs estructurales (`#prompt-textarea`)
 
-# Monitor en tiempo real
-bun run watch:cookies
-```
+**NUNCA depender de:**
+- Clases CSS de Tailwind (cambian con cada deploy)
+- Text labels traducibles ("Copy response", "Stop streaming")
+- Estructura DOM específica
 
-## 🚫 Anti-patrones (evitar)
+### Imports
 
-### ❌ NO duplicar código en scripts
+- **Estáticos** al inicio del archivo (nunca `await import()` dinámico ni `require()`)
+- Tipos con `import type { ... }` cuando solo se necesitan como tipos
+- Rutas relativas con extensión `.ts` (ESM)
 
-```typescript
-// ❌ INCORRECTO
-// scripts/debug-headed.ts
-function getSafeStorageKey() { ... }
-function decryptCookieValue() { ... }
-```
+### Nombres
 
-```typescript
-// ✅ CORRECTO
-// scripts/debug-headed.ts
-import { readChatGPTCookies } from "../extensions/oracle/lib/cookies";
-```
+- Constantes: `SCREAMING_SNAKE_CASE` con unidades (`_MS`, `_SECONDS`)
+- Funciones puras: marcadas con `@pure` en JSDoc
+- Clases: PascalCase, nombre describe responsabilidad (`AIJobRunner`, `ArtifactDownloader`)
+- Archivos: `kebab-case`
 
-### ❌ NO poner lógica de negocio en scripts
+### Funciones Puras
 
-```typescript
-// ❌ INCORRECTO - Lógica en script
-// scripts/something.ts
-function filterAuthCookies(cookies) {
-  return cookies.filter(c => isAuthCookie(c));
-}
-```
+Las funciones puras (`@pure`) son la base del testeo unitario:
+- No tienen efectos secundarios
+- El resultado depende únicamente de los argumentos
+- Se testean sin mocks ni navegador
+- Ejemplo: `isResponseComplete(snapshot: string): boolean`
 
-```typescript
-// ✅ CORRECTO - Script solo usa lib
-// scripts/something.ts
-import { filterImportableAuthCookies } from "../extensions/oracle/lib/cookies";
-const filtered = filterImportableAuthCookies(cookies, chatUrl);
-```
+## Comunicación entre Procesos
 
-## 🔄 Flujo de datos
+El worker se comunica con la extensión mediante el sistema de archivos:
 
 ```
-Browser SQLite
-     ↓
-sweet-cookie (lee + descifra)
-     ↓
-lib/cookies.ts (normaliza + filtra)
-     ↓
-auth-bootstrap.ts (inyecta en Playwright)
-     ↓
-ChatGPT (autenticado)
+/tmp/oracle-{job-id}/
+├── job.json          # Estado del job (config, progreso, resultado)
+├── heartbeat.json    # Heartbeat periódico para detectar jobs zombies
+└── artifacts/        # Archivos descargados del proveedor de IA
 ```
 
-## 📝 Uso en tu código
+## Flujo de un Job
 
-### Caso 1: Leer cookies de ChatGPT
-
-```typescript
-import { readChatGPTCookies } from "./extensions/oracle/lib/cookies";
-
-const result = await readChatGPTCookies({
-  profilePath: "/path/to/brave/profile"
-});
-
-if (result.hasSessionToken) {
-  // Inyectar en browser
-  await browser.cookiesSet(result.cookies);
-}
 ```
-
-### Caso 2: Leer cookies de cualquier sitio
-
-```typescript
-import { readCookiesFromBrowser } from "./extensions/oracle/lib/cookies";
-
-const { cookies, warnings } = await readCookiesFromBrowser({
-  url: "https://example.com/",
-  profilePath: "/path/to/chrome/profile",
-  browsers: ["chrome", "firefox"],
-});
+1. Extension recibe comando "/oracle" del agente pi
+2. Crea un OracleJob con la config del prompt
+3. Spawnea worker/run-oracle-job.ts como proceso aislado
+4. Worker:
+   a. Detecta navegador (browser-detection.ts)
+   b. Lanza navegador con perfil aislado
+   c. Carga cookies (cookie-paths.ts + cookies.ts)
+   d. Crea AIProviderPage via factory
+   e. Clasifica estado de página (auth, ready, challenge)
+   f. Si no autenticado → espera login manual
+   g. Envía prompt (sendPrompt con estrategia Enter)
+   h. Espera respuesta (polling con timeout)
+   i. Extrae texto del asistente
+   j. Descarga artefactos (ArtifactDownloader)
+   k. Escribe resultado en job.json
+5. Extension lee resultado y lo devuelve al agente pi
 ```
-
-### Caso 3: Filtrar cookies manualmente
-
-```typescript
-import { filterImportableAuthCookies } from "./extensions/oracle/lib/cookies";
-
-const filtered = filterImportableAuthCookies(rawCookies, "https://chatgpt.com/");
-console.log(`Auth: ${filtered.cookies.length}, Dropped: ${filtered.dropped.length}`);
-```
-
-### Caso 4: Normalizar cookies
-
-```typescript
-import { normalizeImportedCookie } from "./extensions/oracle/lib/cookies";
-
-const normalized = normalizeImportedCookie(rawCookie, "chatgpt.com");
-if (normalized) {
-  // Cookie válida
-}
-```
-
-## 🧪 Testing
-
-### Unit tests (scripts/test-cookies.ts)
-
-```bash
-bun run test:cookies
-```
-
-Valida:
-- ✅ Lectura de cookies desde Brave
-- ✅ Filtrado de cookies (auth vs tracking)
-- ✅ Estructura de cookies normalizada
-
-### Integration tests (scripts/debug-headed.ts)
-
-```bash
-bun run debug:headed
-```
-
-Valida:
-- ✅ Lectura + filtrado + inyección
-- ✅ Autenticación en ChatGPT
-- ✅ Detección de composer
-
-### Real-time monitoring (scripts/watch-cookies.ts)
-
-```bash
-bun run watch:cookies
-```
-
-Monitorea:
-- 🔄 Cambios en cookies cada 5 segundos
-- 📊 Count de cookies
-- 🔑 Session token presente/ausente
-
-## 🎯 Resumen
-
-| Componente | Rol | Ubicación |
-|------------|-----|-----------|
-| `lib/cookies.ts` | 🎯 Módulo principal | `extensions/oracle/lib/` |
-| `auth-cookie-policy.ts` | ♻️ Re-exporta | `extensions/oracle/worker/` |
-| `auth-bootstrap.ts` | 🔧 Usa sweet-cookie + lib | `extensions/oracle/worker/` |
-| `debug-headed.ts` | 🧪 Debug manual | `scripts/` |
-| `test-cookies.ts` | ✅ Tests automatizados | `scripts/` |
-| `watch-cookies.ts` | 👁️ Monitor real-time | `scripts/` |
-
-**Regla de oro:**
-- ✅ **Lógica de negocio** → `extensions/oracle/lib/`
-- ✅ **Scripts** → Solo debugging/testing, importan de `lib/`
