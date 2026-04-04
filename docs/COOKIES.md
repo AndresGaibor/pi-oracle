@@ -176,7 +176,7 @@ Salida esperada:
 ## 📚 Referencias
 
 - [sweet-cookie npm package](https://www.npmjs.com/package/@steipete/sweet-cookie)
-- [Repositorio original pi-oracle](https://github.com/fitchmultz/pi-oracle)
+- [pi-oracle Repository](https://github.com/AndresGaibor/pi-oracle)
 - [Chrome cookie format](https://chromium.googlesource.com/chromium/src/+/master/docs/cookie_storage.md)
 
 ## 🐛 Troubleshooting

@@ -1,57 +1,57 @@
-# pi-oracle Project Context
+# Contexto del Proyecto pi-oracle
 
-`pi-oracle` is a `pi` extension that allows the agent to use ChatGPT.com as a long-running web oracle. It uses Playwright for browser automation, maintaining an isolated authenticated seed profile and cloning it for per-job runtime profiles.
+`pi-oracle` es una extensión de `pi` que permite al agente usar ChatGPT.com como un oráculo web de larga duración. Utiliza Playwright para automatización de navegador, manteniendo un perfil de seed autenticado aislado y clonándolo para perfiles de runtime por trabajo.
 
-## Project Overview
+## Resumen del Proyecto
 
-- **Purpose**: Use ChatGPT web-model behavior instead of API, enabling large project-context uploads and async background execution.
-- **Architecture**:
-    - **Isolated Profiles**: Normal oracle jobs run in isolated browser profiles, not in the user's active window.
-    - **Seed Profile**: A single authenticated seed profile is maintained via `/oracle-auth`.
-    - **Runtime Profiles**: For each job, the seed profile is cloned into a per-job runtime profile.
-    - **Detached Workers**: Jobs run in detached background worker processes.
-    - **Project Context**: Project files are gathered into a `.tar.zst` archive and uploaded to ChatGPT.
-- **Core Technologies**: TypeScript, Node.js, Playwright, Shell (tar, zstd).
+- **Propósito**: Usar el comportamiento del modelo web de ChatGPT en lugar de API, permitiendo cargas de contexto de proyecto grande y ejecución asincrónica en segundo plano.
+- **Arquitectura**:
+    - **Perfiles Aislados**: Los trabajos normales de oráculo se ejecutan en perfiles de navegador aislados, no en la ventana activa del usuario.
+    - **Perfil Seed**: Un único perfil seed autenticado se mantiene a través de `/oracle-auth`.
+    - **Perfiles de Runtime**: Para cada trabajo, el perfil seed se clona en un perfil de runtime por trabajo.
+    - **Workers Desvinculados**: Los trabajos se ejecutan en procesos worker desvinculados en segundo plano.
+    - **Contexto del Proyecto**: Los archivos del proyecto se recopilan en un archivo `.tar.zst` y se cargan en ChatGPT.
+- **Tecnologías Principales**: TypeScript, Node.js, Playwright, Shell (tar, zstd).
 
-## Directory Structure
+## Estructura de Directorios
 
-- `extensions/oracle/`: The main extension source code.
-    - `index.ts`: Entry point for the extension.
-    - `lib/`: Library code for commands, tools, configuration, job management, and browser interaction.
-    - `worker/`: Scripts and TypeScript files for the background worker.
-- `scripts/`: Maintenance, sanity checks, and debugging scripts.
-- `docs/`: Architectural design (`ORACLE_DESIGN.md`) and recovery procedures (`ORACLE_RECOVERY_DRILL.md`).
-- `stubs/`: TypeScript definitions for the `pi` agent API.
+- `extensions/oracle/`: El código fuente de la extensión principal.
+    - `index.ts`: Punto de entrada de la extensión.
+    - `lib/`: Código de biblioteca para comandos, herramientas, configuración, gestión de trabajos e interacción del navegador.
+    - `worker/`: Scripts y archivos TypeScript para el worker de segundo plano.
+- `scripts/`: Scripts de mantenimiento, verificación de cordura y depuración.
+- `docs/`: Diseño arquitectónico (`ORACLE_DESIGN.md`) y procedimientos de recuperación (`ORACLE_RECOVERY_DRILL.md`).
+- `stubs/`: Definiciones de TypeScript para la API del agente `pi`.
 
-## Building and Running
+## Compilación y Ejecución
 
-- **Install Dependencies**: `npm install` and `bun install`.
-- **Install Playwright Browsers**: `npm run playwright-install`.
-- **Type Check and Validate Extension**: `npm run check:oracle-extension`.
-- **Run Sanity Tests**: `npm run sanity:oracle`.
-- **Check Playwright Setup**: `npm run playwright-check`.
+- **Instalar Dependencias**: `npm install` y `bun install`.
+- **Instalar Navegadores de Playwright**: `npm run playwright-install`.
+- **Verificación de Tipo y Validación de Extensión**: `npm run check:oracle-extension`.
+- **Ejecutar Pruebas de Cordura**: `npm run sanity:oracle`.
+- **Verificar Configuración de Playwright**: `npm run playwright-check`.
 
-## Extension Interface
+## Interfaz de Extensión
 
-### Commands
+### Comandos
 
-- `/oracle <request>`: Instructs the agent to gather context and dispatch an oracle job.
-- `/oracle-auth`: Syncs ChatGPT cookies from real Chrome/Brave into the isolated seed profile.
-- `/oracle-status [job-id]`: Shows the status of oracle jobs.
-- `/oracle-cancel [job-id]`: Cancels an active oracle job.
-- `/oracle-clean <job-id|all>`: Removes temporary files for non-active jobs.
+- `/oracle <solicitud>`: Instruye al agente para recopilar contexto y despachar un trabajo de oráculo.
+- `/oracle-auth`: Sincroniza cookies de ChatGPT desde Chrome/Brave real al perfil seed aislado.
+- `/oracle-status [job-id]`: Muestra el estado de los trabajos de oráculo.
+- `/oracle-cancel [job-id]`: Cancela un trabajo de oráculo activo.
+- `/oracle-clean <job-id|all>`: Elimina archivos temporales para trabajos no activos.
 
-### Tools (for Agent use)
+### Herramientas (para uso del Agente)
 
-- `oracle_submit`: Dispatches a background job with a prompt and a list of files.
-- `oracle_read`: Reads the status and outputs (response, artifacts) of a job.
-- `oracle_cancel`: Cancels an active job.
+- `oracle_submit`: Despacha un trabajo de segundo plano con un prompt y una lista de archivos.
+- `oracle_read`: Lee el estado y salidas (respuesta, artefactos) de un trabajo.
+- `oracle_cancel`: Cancela un trabajo activo.
 
-## Development Conventions
+## Convenciones de Desarrollo
 
-- **State Management**: Job state is persisted in `/tmp/oracle-<job-id>/`.
-- **Configuration**: Merged from global (`~/.pi/agent/extensions/oracle.json`) and project-level (`.pi/extensions/oracle.json`) files.
-- **Locking**: Uses a global maintenance lock for operations like auth bootstrap and job reconciliation to prevent race conditions.
-- **Coding Style**: TypeScript with strict typing. Shell scripts are used for process management and archiving.
-- **Browser Automation**: Prefer direct Playwright API over external CLI tools.
-- **Artifacts**: Artifacts generated by ChatGPT are detected in the response and downloaded directly via Playwright.
+- **Gestión de Estado**: El estado del trabajo se persiste en `/tmp/oracle-<job-id>/`.
+- **Configuración**: Fusionada desde global (`~/.pi/agent/extensions/oracle.json`) y archivos de nivel de proyecto (`.pi/extensions/oracle.json`).
+- **Bloqueo**: Usa un bloqueo de mantenimiento global para operaciones como bootstrap de auth y reconciliación de trabajos para prevenir condiciones de carrera.
+- **Estilo de Código**: TypeScript con tipado estricto. Los scripts de shell se usan para gestión de procesos y archivado.
+- **Automatización del Navegador**: Prefiere API directa de Playwright sobre herramientas CLI externas.
+- **Artefactos**: Los artefactos generados por ChatGPT se detectan en la respuesta y se descargan directamente a través de Playwright.

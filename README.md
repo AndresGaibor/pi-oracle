@@ -1,21 +1,21 @@
 # pi-oracle
 
-`pi-oracle` is a `pi` extension that lets the agent use ChatGPT.com as a long-running web oracle instead of using the API.
+`pi-oracle` es una extensión de `pi` que permite al agente usar ChatGPT.com como un oráculo web de larga duración en lugar de usar la API.
 
-It exists for the hard cases where you want:
-- the user’s real ChatGPT account
-- web-model behavior instead of API usage
-- large project-context uploads
-- async background execution that wakes the originating `pi` session when done
+Existe para los casos difíciles donde quieres:
+- la cuenta real de ChatGPT del usuario
+- comportamiento del modelo web en lugar de uso de API
+- cargas de contexto de proyecto grande
+- ejecución asincrónica en segundo plano que despierta la sesión de `pi` original cuando termina
 
-Normal oracle jobs run in an isolated browser profile, not in the user’s active Chrome window.
+Los trabajos normales de oráculo se ejecutan en un perfil de navegador aislado, no en la ventana activa de Chrome del usuario.
 
-Status: experimental public beta, validated primarily on macOS.
+Estado: beta pública experimental, validada principalmente en macOS.
 
-## What it does
+## Qué hace
 
-The extension adds:
-- `/oracle <request>`
+La extensión añade:
+- `/oracle <solicitud>`
 - `/oracle-auth`
 - `/oracle-status [job-id]`
 - `/oracle-cancel [job-id]`
@@ -24,54 +24,54 @@ The extension adds:
 - `oracle_read`
 - `oracle_cancel`
 
-An oracle job:
-1. gathers a project archive
-2. opens ChatGPT in an isolated runtime profile
-3. uploads the archive and sends the prompt
-4. waits in the background
-5. persists the response and any artifacts under `/tmp/oracle-<job-id>/`
-6. wakes the originating `pi` session on completion
+Un trabajo de oráculo:
+1. recopila un archivo de proyecto
+2. abre ChatGPT en un perfil de runtime aislado
+3. carga el archivo y envía el prompt
+4. espera en segundo plano
+5. persiste la respuesta y artefactos bajo `/tmp/oracle-<job-id>/`
+6. despierta la sesión de `pi` original al completarse
 
-## Example
+## Ejemplo
 
 ```text
-/oracle Invoke the Oracle to have it generate a thorough code review of the current pending changes. Include all modified files, and adjacent files, in the archive. Use the Pro Model with Extended effort.
+/oracle Invoca el Oráculo para que genere una revisión exhaustiva del código de los cambios pendientes. Incluye todos los archivos modificados y archivos adyacentes en el archivo. Usa el Modelo Pro con esfuerzo extendido.
 ```
 
-## Why this exists
+## Por qué existe esto
 
-The goal is to get strong ChatGPT web-model answers without:
-- paying API costs for every long review
-- blocking the agent for 10–90 minutes
-- stealing focus from the user’s active browser session
+El objetivo es obtener respuestas sólidas del modelo web de ChatGPT sin:
+- pagar costos de API por cada revisión larga
+- bloquear el agente durante 10–90 minutos
+- robar el foco de la sesión del navegador activo del usuario
 
-## Current scope
+## Alcance actual
 
-Currently validated for:
+Actualmente validado para:
 - macOS
-- local Google Chrome
-- local ChatGPT web login in Chrome
-- isolated auth seed profile + per-job runtime profile clones
-- concurrent jobs across different projects/sessions
-- same-conversation exclusion for follow-ups
-- plain-text responses
-- artifact capture, including multi-artifact runs
+- Google Chrome local
+- inicio de sesión web local de ChatGPT en Chrome
+- perfil de seed de auth aislado + clones de perfil de runtime por trabajo
+- trabajos concurrentes en diferentes proyectos/sesiones
+- exclusión de misma conversación para seguimientos
+- respuestas en texto plano
+- captura de artefactos, incluyendo ejecuciones con múltiples artefactos
 
-Not promised yet:
-- cross-platform support
-- immunity to future ChatGPT UI changes
-- fully polished partial-artifact terminal semantics
+Aún no prometido:
+- soporte multiplataforma
+- inmunidad a cambios futuros en la UI de ChatGPT
+- semántica terminal de artefacto parcial totalmente pulida
 
-## Requirements
+## Requisitos
 
 - macOS
-- Google Chrome or Brave Browser installed
-- ChatGPT already signed into a local Chrome profile
-- `pi` installed
-- `playwright` browsers installed (`bunx playwright install`)
-- `tar` and `zstd` available
+- Google Chrome o Brave Browser instalado
+- ChatGPT ya iniciado en un perfil local de Chrome
+- `pi` instalado
+- navegadores de `playwright` instalados (`bunx playwright install`)
+- `tar` y `zstd` disponibles
 
-## Install
+## Instalación
 
 npm:
 
@@ -82,23 +82,23 @@ pi install npm:pi-oracle
 GitHub:
 
 ```bash
-pi install https://github.com/fitchmultz/pi-oracle
+pi install https://github.com/AndresGaibor/pi-oracle
 ```
 
-## First-time setup
+## Configuración inicial
 
-1. Make sure ChatGPT already works in your local Chrome profile.
-2. Configure the oracle if needed via `~/.pi/agent/extensions/oracle.json`.
-3. Run `/oracle-auth`.
-4. Run a tiny `/oracle` smoke test.
+1. Asegúrate de que ChatGPT ya funcione en tu perfil local de Chrome.
+2. Configura el oráculo si es necesario via `~/.pi/agent/extensions/oracle.json`.
+3. Ejecuta `/oracle-auth`.
+4. Ejecuta una pequeña prueba de `/oracle`.
 
-## Configuration
+## Configuración
 
-Config files:
+Archivos de configuración:
 - global: `~/.pi/agent/extensions/oracle.json`
-- project: `.pi/extensions/oracle.json`
+- proyecto: `.pi/extensions/oracle.json`
 
-Common settings:
+Configuraciones comunes:
 - `browser.args`
 - `browser.executablePath`
 - `browser.authSeedProfileDir`
@@ -106,22 +106,22 @@ Common settings:
 - `auth.chromeProfile`
 - `auth.chromeCookiePath`
 
-Project config should only override safe, non-privileged settings.
+La configuración del proyecto debe solo sobrescribir configuraciones seguras y sin privilegios.
 
-Detailed design and maintainer docs:
+Docs detallados de diseño y para mantenedores:
 - `docs/ORACLE_DESIGN.md`
 - `docs/ORACLE_RECOVERY_DRILL.md`
 
-## Privacy / local data
+## Privacidad / datos locales
 
-This extension is local-first, but it does read and persist local data:
-- `/oracle-auth` reads ChatGPT cookies from a local Chrome profile
-- job archives are uploaded to ChatGPT.com
-- responses and artifacts are written under `/tmp/oracle-<job-id>/`
+Esta extensión es local-first, pero lee y persiste datos locales:
+- `/oracle-auth` lee cookies de ChatGPT de un perfil local de Chrome
+- los archivos de trabajos se cargan en ChatGPT.com
+- respuestas y artefactos se escriben bajo `/tmp/oracle-<job-id>/`
 
-Review the code and design docs before using it with sensitive material.
+Revisa el código y docs de diseño antes de usarlo con material sensible.
 
-## Validation helpers
+## Helpers de validación
 
 ```bash
 npm run check:oracle-extension
@@ -129,14 +129,14 @@ npm run sanity:oracle
 npm run pack:check
 ```
 
-## Beta caveats
+## Advertencias de beta
 
-The highest-risk areas to monitor are:
-- ChatGPT UI drift
-- auth/bootstrap drift
-- artifact download behavior
-- local environment assumptions
+Las áreas de mayor riesgo a monitorear son:
+- cambios en la UI de ChatGPT
+- cambios en auth/bootstrap
+- comportamiento de descarga de artefactos
+- suposiciones del entorno local
 
-## License
+## Licencia
 
-MIT. See `LICENSE`.
+MIT. Ver `LICENSE`.

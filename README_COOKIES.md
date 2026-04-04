@@ -96,7 +96,7 @@ filterImportableAuthCookies(
 ## 🔗 Referencias
 
 - [sweet-cookie npm](https://www.npmjs.com/package/@steipete/sweet-cookie)
-- [Repo original](https://github.com/fitchmultz/pi-oracle)
+- [Repositorio pi-oracle](https://github.com/AndresGaibor/pi-oracle)
 
 ---
 

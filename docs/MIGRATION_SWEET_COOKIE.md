@@ -163,11 +163,10 @@ if (!hasSessionToken) {
 ## Referencias
 
 - [sweet-cookie docs](https://www.npmjs.com/package/@steipete/sweet-cookie)
-- [pi-oracle original](https://github.com/fitchmultz/pi-oracle)
+- [pi-oracle Repository](https://github.com/AndresGaibor/pi-oracle)
 - [Chrome cookie format](https://chromium.googlesource.com/chromium/src/+/master/docs/cookie_storage.md)
 
 ---
 
-**Autor:** Migración basada en [fitchmultz/pi-oracle](https://github.com/fitchmultz/pi-oracle)  
-**Fecha:** 2026-04-04  
+**Autor:** Migración de [AndresGaibor/pi-oracle](https://github.com/AndresGaibor/pi-oracle)
 **Versión:** 0.2.0
