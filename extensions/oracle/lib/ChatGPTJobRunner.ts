@@ -47,7 +47,7 @@ import type { AIProviderPage } from "../pages/ai-provider.types";
 import type { BrowserActions } from "../pages/browser-actions.types";
 import { CHATGPT_LABELS as DEFAULT_LABELS, MODEL_FAMILY_PREFIX, EFFORT_LABELS } from "../pages/chatgpt/chatgpt.selectors";
 import { parseSnapshotEntries, findEntry, findLastEntry, type ParsedSnapshotEntry } from "../shared/snapshot-utils";
-
+import { isResponseComplete, findArtifactCandidates } from "../pages/chatgpt/chatgpt.assertions";
 // ---------------------------------------------------------------------------
 // Labels – single source of truth, shared with ChatGPTPage
 // ---------------------------------------------------------------------------
@@ -274,19 +274,11 @@ function snapshotWeaklyMatchesRequestedModel(snapshot: string, job: JobState): b
  *
  * This is a SNAPSHOT-BASED completion detector, not a timeout-based one.
  */
+// Snapshot-based completion detector delegates to chatgpt.assertions.isResponseComplete
 function snapshotShowsCompletedResponse(snapshot: string): boolean {
-	const hasStopStreaming = snapshotHasLabel(snapshot, "button", LABELS.stop as unknown as readonly string[]);
-	const hasCopyResponse = snapshotHasLabel(snapshot, "button", LABELS.copyResponse as unknown as readonly string[]);
-	return hasCopyResponse && !hasStopStreaming;
+	return isResponseComplete(snapshot);
 }
 
-function isLikelyArtifactLabel(label: unknown): boolean {
-	const normalized = String(label || "").trim();
-	if (!normalized) return false;
-	const upper = normalized.toUpperCase();
-	if (upper === "ATTACHED" || upper === "DONE") return true;
-	return /(?:^|[^\w])[^\n]*\.[A-Za-z0-9]{1,12}(?:$|[^\w])/.test(normalized);
-}
 
 function preferredArtifactName(label: unknown, index: number): string {
 	const normalized = String(label || "").trim();
@@ -295,28 +287,6 @@ function preferredArtifactName(label: unknown, index: number): string {
 	return `artifact-${String(index + 1).padStart(2, "0")}`;
 }
 
-function artifactCandidatesFromEntries(entries: ParsedSnapshotEntry[]): Array<{ label: string; ref: string }> {
-	const excluded = new Set([
-		"Copy response", "Good response", "Bad response", "Share", "Switch model", "More actions",
-		...LABELS.addFiles, "Start dictation", "Start Voice",
-		...LABELS.modelSelector, "Open conversation options", "Scroll to bottom",
-		...LABELS.close,
-	]);
-
-	const seen = new Set<string>();
-	const candidates: Array<{ label: string; ref: string }> = [];
-	for (const entry of entries) {
-		if (!entry.label) continue;
-		if (excluded.has(entry.label)) continue;
-		if (entry.label.startsWith("Thought for ")) continue;
-		if (entry.kind !== "button" && entry.kind !== "link") continue;
-		if (!isLikelyArtifactLabel(entry.label)) continue;
-		if (seen.has(entry.label)) continue;
-		seen.add(entry.label);
-		candidates.push({ label: entry.label, ref: entry.ref });
-	}
-	return candidates;
-}
 
 async function ensurePrivateDir(path: string): Promise<void> {
 	await mkdir(path, { recursive: true, mode: 0o700 });
@@ -716,7 +686,7 @@ export class ChatGPTJobRunner {
 	 *   - Don't have to worry about lazy-loading or React re-renders
 	 *   - Can easily filter by button/link kind using parseSnapshotEntries()
 	 *
-	 * See artifactCandidatesFromEntries() for filtering logic.
+ * See findArtifactCandidates() for filtering logic.
 	 */
 	private async collectArtifactCandidates(responseIndex: number) {
 		const snapshot = await browser.snapshotText();
@@ -726,7 +696,7 @@ export class ChatGPTJobRunner {
 			snapshot,
 			targetSlice,
 			// Parse snapshot entries and find buttons/links that look like downloadable files
-			candidates: artifactCandidatesFromEntries(parseSnapshotEntries(targetSlice)),
+candidates: findArtifactCandidates(targetSlice),
 		};
 	}
 
