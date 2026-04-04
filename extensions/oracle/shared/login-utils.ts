@@ -12,6 +12,11 @@ export const DEFAULT_CHATGPT_LOGIN_PROBE_CONFIG: LoginProbeConfig = {
 	loginCtaPatterns: ["log in", "login", "sign in", "signin", "continue with"],
 };
 
+/** Backwards-compatible builder: keep original name for existing callers */
+export function buildLoginProbeScript(timeoutMs: number): string {
+	return buildLoginProbeScriptFor(DEFAULT_CHATGPT_LOGIN_PROBE_CONFIG, timeoutMs);
+}
+
 /**
  * Build a probe script using a provider-specific configuration.
  * This is the generalized builder for login probes that accepts a base URL and session endpoint.
@@ -131,6 +136,7 @@ export interface LoginProbeResult {
  * Defaults to ChatGPT probe for backward compatibility.
  */
 export async function loginProbe(evaluateFn: (script: string) => Promise<string>): Promise<LoginProbeResult> {
+	const script = buildLoginProbeScriptFor(DEFAULT_CHATGPT_LOGIN_PROBE_CONFIG, 5_000);
 	const raw = await evaluateFn(script);
 
 	let result: any = undefined;

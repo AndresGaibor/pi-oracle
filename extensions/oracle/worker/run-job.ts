@@ -38,6 +38,7 @@ let cleaningUpBrowser = false;
 let cleaningUpRuntime = false;
 let shuttingDown = false;
 let lastHeartbeatMs = 0;
+let pageToken: string | null = null;
 
 
 function snapshotHasLabel(snapshot: string, kind: string, labels: readonly string[]): boolean {
