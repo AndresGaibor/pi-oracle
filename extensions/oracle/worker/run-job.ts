@@ -4,7 +4,7 @@ import { appendFile, chmod, mkdir, readFile, rename, rm, stat, writeFile } from 
 import { basename, dirname, join } from "node:path";
 import { spawn } from "node:child_process";
 import { parseSnapshotEntries, findEntry, findLastEntry, labelMatches, type ParsedSnapshotEntry } from "../shared/snapshot-utils";
-import { isResponseComplete, findArtifactCandidates } from "../pages/chatgpt/chatgpt.assertions";
+import { isResponseComplete, findArtifactCandidates, preferredArtifactName } from "../pages/chatgpt/chatgpt.assertions";
 import { buildLoginProbeScript, classifyChatPage, type LoginProbeResult, type ClassifyResult, type PageState } from "../shared/login-utils";
 import * as browser from "../lib/browser";
 import { CHATGPT_LABELS, MODEL_FAMILY_PREFIX, EFFORT_LABELS } from "../pages/chatgpt/chatgpt.selectors";
@@ -715,12 +715,7 @@ async function detectType(path: string) {
 }
 
 
-function preferredArtifactName(label: any, index: number) {
-  const normalized = String(label || "").trim();
-  const fileNameMatch = normalized.match(/([A-Za-z0-9._-]+\.[A-Za-z0-9]{1,12})(?!.*[A-Za-z0-9._-]+\.[A-Za-z0-9]{1,12})/);
-  if (fileNameMatch) return basename(fileNameMatch[1]).replace(/[^a-zA-Z0-9._-]/g, "_");
-  return `artifact-${String(index + 1).padStart(2, "0")}`;
-}
+
 
 
 async function collectArtifactCandidates(job: any, responseIndex: number) {

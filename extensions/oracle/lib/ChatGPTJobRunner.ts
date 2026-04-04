@@ -47,7 +47,7 @@ import type { AIProviderPage } from "../pages/ai-provider.types";
 import type { BrowserActions } from "../pages/browser-actions.types";
 import { CHATGPT_LABELS as DEFAULT_LABELS, MODEL_FAMILY_PREFIX, EFFORT_LABELS } from "../pages/chatgpt/chatgpt.selectors";
 import { parseSnapshotEntries, findEntry, findLastEntry, labelMatches, type ParsedSnapshotEntry } from "../shared/snapshot-utils";
-import { isResponseComplete, findArtifactCandidates } from "../pages/chatgpt/chatgpt.assertions";
+import { isResponseComplete, findArtifactCandidates, preferredArtifactName } from "../pages/chatgpt/chatgpt.assertions";
 // ---------------------------------------------------------------------------
 // Labels – single source of truth, shared with ChatGPTPage
 // ---------------------------------------------------------------------------
@@ -277,12 +277,7 @@ function snapshotShowsCompletedResponse(snapshot: string): boolean {
 }
 
 
-function preferredArtifactName(label: unknown, index: number): string {
-	const normalized = String(label || "").trim();
-	const fileNameMatch = normalized.match(/([A-Za-z0-9._-]+\.[A-Za-z0-9]{1,12})(?!.*[A-Za-z0-9._-]+\.[A-Za-z0-9]{1,12})/);
-	if (fileNameMatch) return basename(fileNameMatch[1]).replace(/[^a-zA-Z0-9._-]/g, "_");
-	return `artifact-${String(index + 1).padStart(2, "0")}`;
-}
+
 
 
 async function ensurePrivateDir(path: string): Promise<void> {
