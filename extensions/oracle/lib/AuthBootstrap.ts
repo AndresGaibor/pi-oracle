@@ -2,12 +2,9 @@
  * AuthBootstrap – orchestrates the /oracle-auth flow.
  * Reads ChatGPT cookies from Chrome, seeds them into an isolated browser,
  * and verifies the auth state.
- *
- * Clean architecture: application/service layer coordinating
- * infrastructure (browser, sweet-cookie) and domain (ChatGPTAuthPage).
  */
 import { existsSync } from "node:fs";
-import { appendFile, chmod, lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { appendFile, chmod, lstat, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { getCookies } from "@steipete/sweet-cookie";
@@ -17,7 +14,10 @@ import type { BrowserActions } from "../pages/browser-actions.types";
 import * as browser from "../lib/browser";
 import { classifyChatPage, type LoginProbeResult, type ClassifyResult } from "../shared/login-utils";
 import { findEntry, findLastEntry } from "../shared/snapshot-utils";
-import { AUTH_STEP_SETTLE_MS, AUTH_RETRY_POLL_MS } from "./constants";
+import { AUTH_STEP_SETTLE_MS } from "./constants";
+import { CHATGPT_COOKIE_ORIGINS } from "./cookies";
+import { sleep, stripQuery, snapshotHasLabel, ensurePrivateDir } from "../shared/helpers";
+import { withAuthLock } from "./locks";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -56,30 +56,13 @@ interface ProfilePlan {
 // Constants
 // ---------------------------------------------------------------------------
 
-const CHATGPT_LABELS = {
-	composer: ["Chat with ChatGPT", "Chatear con ChatGPT", "Pregunta lo que quieras"],
-	addFiles: ["Add files and more", "Agregar archivos y más"],
-	modelSelector: ["Model selector", "Selector de modelo"],
-};
-
 const LOGIN_PROBE_TIMEOUT_MS = 5_000;
-const CHATGPT_COOKIE_ORIGINS = [
-	"https://chatgpt.com",
-	"https://chat.openai.com",
-	"https://atlas.openai.com",
-	"https://auth.openai.com",
-	"https://sentinel.openai.com",
-	"https://ws.chatgpt.com",
-];
-
 const LOG_PATH = "/tmp/oracle-auth.log";
 const URL_PATH = "/tmp/oracle-auth.url.txt";
 const SNAPSHOT_PATH = "/tmp/oracle-auth.snapshot.txt";
 const BODY_PATH = "/tmp/oracle-auth.body.txt";
 const SCREENSHOT_PATH = "/tmp/oracle-auth.png";
 const REAL_CHROME_USER_DATA_DIR = resolve(homedir(), "Library", "Application Support", "Google", "Chrome");
-const ORACLE_STATE_DIR = "/tmp/pi-oracle-state";
-const LOCKS_DIR = join(ORACLE_STATE_DIR, "locks");
 
 // ---------------------------------------------------------------------------
 // Browser actions adapter
@@ -102,108 +85,10 @@ const browserActions: BrowserActions = {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function sleep(ms: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function stripQuery(url: string): string {
-	try {
-		const parsed = new URL(url);
-		parsed.hash = "";
-		parsed.search = "";
-		return parsed.toString();
-	} catch {
-		return url;
-	}
-}
-
-function snapshotHasLabel(snapshot: string, kind: string, labels: string[]): boolean {
-	return labels.some((label) => snapshot.includes(`${kind} "${label}"`));
-}
-
 async function log(message: string): Promise<void> {
 	const line = `[${new Date().toISOString()}] ${message}\n`;
 	await appendFile(LOG_PATH, line, { encoding: "utf8", mode: 0o600 });
 	await chmod(LOG_PATH, 0o600).catch(() => undefined);
-}
-
-async function ensurePrivateDir(path: string): Promise<void> {
-	await mkdir(path, { recursive: true, mode: 0o700 });
-	await chmod(path, 0o700).catch(() => undefined);
-}
-
-// ---------------------------------------------------------------------------
-// Lock management (inline – same as lib/locks but self-contained for auth)
-// ---------------------------------------------------------------------------
-
-import { createHash } from "node:crypto";
-
-function leaseKey(kind: string, key: string): string {
-	return `${kind}-${createHash("sha256").update(key).digest("hex").slice(0, 24)}`;
-}
-
-async function readLockProcessPid(path: string): Promise<number | undefined> {
-	const metadataPath = join(path, "metadata.json");
-	if (!existsSync(metadataPath)) return undefined;
-	try {
-		const metadata = JSON.parse(await readFile(metadataPath, "utf8"));
-		return typeof metadata?.processPid === "number" && Number.isInteger(metadata.processPid) && metadata.processPid > 0
-			? metadata.processPid
-			: undefined;
-	} catch {
-		return undefined;
-	}
-}
-
-function isProcessAlive(pid: number): boolean {
-	try {
-		process.kill(pid, 0);
-		return true;
-	} catch (error: any) {
-		if (error && typeof error === "object" && "code" in error && error.code === "ESRCH") return false;
-		return true;
-	}
-}
-
-async function maybeReclaimStaleLock(path: string): Promise<boolean> {
-	const processPid = await readLockProcessPid(path);
-	if (!processPid || isProcessAlive(processPid)) return false;
-	await rm(path, { recursive: true, force: true }).catch(() => undefined);
-	return true;
-}
-
-async function acquireLock(kind: string, key: string, metadata: unknown, timeoutMs = 30_000): Promise<string> {
-	const path = join(LOCKS_DIR, leaseKey(kind, key));
-	const deadline = Date.now() + timeoutMs;
-	await ensurePrivateDir(ORACLE_STATE_DIR);
-	await ensurePrivateDir(LOCKS_DIR);
-
-	while (Date.now() < deadline) {
-		try {
-			await mkdir(path, { recursive: false, mode: 0o700 });
-			await writeFile(join(path, "metadata.json"), `${JSON.stringify(metadata, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-			return path;
-		} catch (error: any) {
-			if (!(error && typeof error === "object" && "code" in error && error.code === "EEXIST")) throw error;
-			if (await maybeReclaimStaleLock(path)) continue;
-		}
-		await sleep(AUTH_RETRY_POLL_MS);
-	}
-	throw new Error(`Timed out waiting for oracle ${kind} lock: ${key}`);
-}
-
-async function releaseLock(path: string | undefined): Promise<void> {
-	if (!path) return;
-	await rm(path, { recursive: true, force: true }).catch(() => undefined);
-}
-
-async function withLock<T>(kind: string, key: string, metadata: unknown, fn: () => Promise<T>, timeoutMs?: number): Promise<T> {
-	const handle = await acquireLock(kind, key, metadata, timeoutMs);
-	try {
-		return await fn();
-	} finally {
-		await releaseLock(handle);
-	}
 }
 
 // ---------------------------------------------------------------------------
@@ -280,7 +165,7 @@ export class AuthBootstrap {
 			executablePath: this.config.browser.executablePath,
 			userAgent: this.config.browser.userAgent,
 			args: Array.isArray(this.config.browser.args) ? this.config.browser.args : undefined,
-			headless: false, // auth always runs headed for user interaction
+			headless: false,
 		});
 		await log("Launching isolated browser: Playwright persistent context launched");
 	}
@@ -482,7 +367,7 @@ export class AuthBootstrap {
 	}
 
 	private classifyChatPageWithAuth(params: { url: string; snapshot: string; body: string; probe?: AuthBootstrapProbeResult }): ClassifyResult {
-		const baseClassification = classifyChatPage({
+		const base = classifyChatPage({
 			url: params.url,
 			snapshot: params.snapshot,
 			body: params.body,
@@ -490,37 +375,37 @@ export class AuthBootstrap {
 			chatUrl: this.config.browser.chatUrl,
 		});
 
-		if (baseClassification.state === "challenge_blocking") {
+		if (base.state === "challenge_blocking") {
 			return {
-				...baseClassification,
+				...base,
 				message: `ChatGPT challenge detected after syncing cookies from ${this.cookieSourceLabel()}. ` +
 					`The isolated oracle browser was left open on profile ${this.runtimeProfileDir}; complete the challenge there, then rerun /oracle-auth. Logs: ${LOG_PATH}`,
 			};
 		}
 
-		if (baseClassification.state === "login_required") {
+		if (base.state === "login_required") {
 			return {
-				...baseClassification,
+				...base,
 				message: `Synced cookies from ${this.cookieSourceLabel()}, but ChatGPT still rejected the session. ` +
 					`Check auth.chromeProfile/auth.chromeCookiePath and inspect ${LOG_PATH}.`,
 			};
 		}
 
-		if (baseClassification.state === "auth_transitioning") {
+		if (base.state === "auth_transitioning") {
 			return {
-				...baseClassification,
+				...base,
 				message: `ChatGPT accepted the cookies but is still resolving the authentication flow. Logs: ${LOG_PATH}`,
 			};
 		}
 
-		if (baseClassification.state === "authenticated_and_ready") {
+		if (base.state === "authenticated_and_ready") {
 			return {
-				...baseClassification,
+				...base,
 				message: `Imported ChatGPT auth from ${this.cookieSourceLabel()} into the isolated oracle profile. Logs: ${LOG_PATH}`,
 			};
 		}
 
-		return baseClassification;
+		return base;
 	}
 
 	private async maybeSelectAccountIdentity(snapshot: string, probe: AuthBootstrapProbeResult): Promise<boolean> {
