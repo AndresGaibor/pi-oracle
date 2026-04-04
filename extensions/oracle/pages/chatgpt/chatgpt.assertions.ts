@@ -9,14 +9,22 @@ import { CHATGPT_LABELS, CHATGPT_SELECTORS, MODEL_FAMILY_PREFIX, EFFORT_LABELS, 
 // UI presence assertions
 // ---------------------------------------------------------------------------
 
-/** Check if composer textbox is visible */
+/**
+ * Check if composer textbox is visible.
+ *
+ * @pure No side effects. Deterministic for a given snapshot input.
+ */
 export function hasComposer(snapshot: string): boolean {
 	return parseSnapshotEntries(snapshot).some(
 		(e) => e.kind === "textbox" && labelMatches(e.label, CHATGPT_LABELS.composer),
 	);
 }
 
-/** Check if send button is enabled */
+/**
+ * Check if send button is enabled.
+ *
+ * @pure No side effects. Deterministic for a given snapshot input.
+ */
 export function canSend(snapshot: string): boolean {
 	const entry = findEntry(
 		snapshot,
@@ -25,21 +33,33 @@ export function canSend(snapshot: string): boolean {
 	return !!entry;
 }
 
-/** Check if add files button is available */
+/**
+ * Check if add files button is available.
+ *
+ * @pure No side effects. Deterministic for a given snapshot input.
+ */
 export function hasAddFiles(snapshot: string): boolean {
 	return parseSnapshotEntries(snapshot).some(
 		(e) => e.kind === "button" && labelMatches(e.label, CHATGPT_LABELS.addFiles),
 	);
 }
 
-/** Check if model selector is visible */
+/**
+ * Check if model selector is visible.
+ *
+ * @pure No side effects. Deterministic for a given snapshot input.
+ */
 export function hasModelSelector(snapshot: string): boolean {
 	return parseSnapshotEntries(snapshot).some(
 		(e) => e.kind === "button" && labelMatches(e.label, CHATGPT_LABELS.modelSelector),
 	);
 }
 
-/** Check if stop button is visible */
+/**
+ * Check if stop button is visible.
+ *
+ * @pure No side effects. Deterministic for a given snapshot input.
+ */
 export function hasStopButton(snapshot: string): boolean {
 	return parseSnapshotEntries(snapshot).some(
 		(e) => e.kind === "button" && labelMatches(e.label, CHATGPT_LABELS.stop),
@@ -50,7 +70,11 @@ export function hasStopButton(snapshot: string): boolean {
 // Model configuration assertions
 // ---------------------------------------------------------------------------
 
-/** Find model button entry for a given family */
+/**
+ * Find model button entry for a given family.
+ *
+ * @pure No side effects. Deterministic for a given snapshot input.
+ */
 export function findModelButton(snapshot: string, family: string): ParsedSnapshotEntry | undefined {
 	const prefix = MODEL_FAMILY_PREFIX[family] || "";
 	return findEntry(
@@ -59,12 +83,20 @@ export function findModelButton(snapshot: string, family: string): ParsedSnapsho
 	);
 }
 
-/** Check if Thinking effort chip is visible */
+/**
+ * Check if Thinking effort chip is visible.
+ *
+ * @pure No side effects. Deterministic for a given snapshot input.
+ */
 export function hasThinkingChip(snapshot: string): boolean {
 	return /button "(?:Light|Standard|Extended|Heavy|Ligero|Estándar|Ampliado|Extendido|Alto|Razonamiento ampliado)(?: thinking)?(?:, click to remove)?"/i.test(snapshot);
 }
 
-/** Get visible effort label */
+/**
+ * Get visible effort label.
+ *
+ * @pure No side effects. Deterministic for a given snapshot input.
+ */
 export function getVisibleEffort(snapshot: string): string | undefined {
 	const entries = parseSnapshotEntries(snapshot);
 	const allLabels = [...new Set(Object.values(EFFORT_LABELS).flat())];
@@ -81,7 +113,11 @@ export function getVisibleEffort(snapshot: string): string | undefined {
 	return btnEntry?.label;
 }
 
-/** Check if effort selection is visible for a given effort */
+/**
+ * Check if effort selection is visible for a given effort.
+ *
+ * @pure No side effects. Deterministic for a given snapshot input.
+ */
 export function isEffortVisible(snapshot: string, effort: string): boolean {
 	const labels = EFFORT_LABELS[effort];
 	if (!labels) return false;
@@ -103,7 +139,11 @@ export function isEffortVisible(snapshot: string, effort: string): boolean {
 	});
 }
 
-/** Check if model configuration matches requested family */
+/**
+ * Check if model configuration matches requested family.
+ *
+ * @pure No side effects. Deterministic for a given snapshot input.
+ */
 export function modelMatchesFamily(snapshot: string, family: string): boolean {
 	const entries = parseSnapshotEntries(snapshot);
 	return entries.some((e) => {
@@ -116,20 +156,19 @@ export function modelMatchesFamily(snapshot: string, family: string): boolean {
 // Response assertions
 // ---------------------------------------------------------------------------
 
-/** Check if snapshot shows a completed response (has copy, no stop)
- *  Uses dual strategy: data-testid check (primary) + i18n labels (fallback)
+/**
+ * Check if snapshot shows a completed response (has copy, no stop).
+ *
+ * @pure No side effects. Deterministic for a given snapshot input.
  */
 export function isResponseComplete(snapshot: string): boolean {
 	const entries = parseSnapshotEntries(snapshot);
 
-	// Primary: Check for stop button absence and copy button presence
-	// These buttons are mutually exclusive during streaming
 	const hasStopButton = entries.some(
 		(e) => e.kind === "button" && labelMatches(e.label, CHATGPT_LABELS.stop),
 	);
 	if (hasStopButton) return false; // Still streaming
 
-	// Check for copy response button (indicates completion)
 	const hasCopyButton = entries.some(
 		(e) => e.kind === "button" && labelMatches(e.label, CHATGPT_LABELS.copyResponse),
 	);
@@ -137,12 +176,12 @@ export function isResponseComplete(snapshot: string): boolean {
 }
 
 /**
- * Detecta si ChatGPT está actualmente en modo streaming (generando respuesta).
- * Más confiable que buscar "Stop streaming" en el snapshot.
+ * Detects if ChatGPT is currently in streaming mode.
+ *
+ * @pure No side effects. Deterministic for a given snapshot input.
  */
 export function isStreamingActive(snapshot: string): boolean {
 	const entries = parseSnapshotEntries(snapshot);
-	// Fallback: buscar text labels
 	const hasStop = entries.find(
 		(e) => e.kind === "button" && labelMatches(e.label, CHATGPT_LABELS.stop),
 	);
@@ -150,14 +189,19 @@ export function isStreamingActive(snapshot: string): boolean {
 }
 
 /**
- * Detecta si el modelo actual es un "thinking model" (ej: o1, GPT-5-thinking).
- * Los thinking models muestran un bloque expandible con "Thought for X seconds".
+ * Detects if the current model is a "thinking model".
+ *
+ * @pure No side effects. Deterministic for a given snapshot input.
  */
 export function isThinkingModel(snapshot: string): boolean {
 	return snapshot.includes("Thought for") || snapshot.includes("thinking");
 }
 
-/** Check if artifact candidates are present */
+/**
+ * Find artifact candidate button/link entries.
+ *
+ * @pure No side effects. Deterministic for a given snapshot input.
+ */
 export function findArtifactCandidates(snapshot: string): Array<{ label: string; ref: string }> {
 	const excluded = new Set([
 		...CHATGPT_LABELS.copyResponse,
@@ -190,14 +234,24 @@ export function findArtifactCandidates(snapshot: string): Array<{ label: string;
 	return candidates;
 }
 
+/**
+ * Check if a label looks like a downloadable artifact.
+ *
+ * @pure No side effects. Deterministic for a given label input.
+ */
 export function isLikelyArtifactLabel(label: string): boolean {
 	const normalized = label.trim();
 	if (!normalized) return false;
 	const upper = normalized.toUpperCase();
 	if (upper === "ATTACHED" || upper === "DONE") return true;
-	return /(?:^|[^\\w])[^\n]*\.[A-Za-z0-9]{1,12}(?:$|[^\\w])/.test(normalized);
+	return /(?:^|[^\w])[^\n]*\.[A-Za-z0-9]{1,12}(?:$|[^\w])/.test(normalized);
 }
 
+/**
+ * Derive a safe filename from an artifact label.
+ *
+ * @pure No side effects. Deterministic for a given label and index.
+ */
 export function preferredArtifactName(label: string, index: number): string {
 	const normalized = String(label || "").trim();
 	const fileNameMatch = normalized.match(/([A-Za-z0-9._-]+\.[A-Za-z0-9]{1,12})(?!.*[A-Za-z0-9._-]+\.[A-Za-z0-9]{1,12})/);

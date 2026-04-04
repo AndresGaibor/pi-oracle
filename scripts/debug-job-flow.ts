@@ -1,12 +1,12 @@
 #!/usr/bin/env bun
 /**
  * Debug Job Flow Script
- * Uses ChatGPTJobRunner class from lib for orchestrated job execution
+ * Uses AIJobRunner class from lib for orchestrated job execution
  */
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
-import { ChatGPTJobRunner, type JobState, type JobConfig } from "../extensions/oracle/lib/ChatGPTJobRunner";
+import { AIJobRunner, type JobState, type JobConfig } from "../extensions/oracle/lib/ai-job-runner";
 
 const BRAVE_PROFILE = join(
 	homedir(),
@@ -72,7 +72,7 @@ async function main() {
 		};
 
 		console.log("\n" + "=".repeat(60));
-		console.log("🚀 ChatGPT Job Runner (Class-Based)");
+		console.log("🚀 AI Job Runner (Class-Based)");
 		console.log("=".repeat(60));
 		console.log(`Job ID: ${job.id}`);
 		console.log(`Chat URL: ${config.browser.chatUrl}`);
@@ -80,7 +80,7 @@ async function main() {
 		console.log("=".repeat(60) + "\n");
 
 		// Instantiate runner with dependency injection
-		const runner = new ChatGPTJobRunner(
+		const runner = new AIJobRunner(
 			job,
 			createLogger(),
 			createHeartbeat(),
