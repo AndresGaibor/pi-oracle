@@ -59,6 +59,15 @@ export async function clickSend(browser: BrowserActions): Promise<void> {
 	await browser.clickRef(entry.ref);
 }
 
+/**
+ * Submit prompt using Enter key (preferred over clickSend).
+ * More reliable than clicking the send button which may not be visible.
+ * Works for both regular messages and regeneration.
+ */
+export async function sendPrompt(browser: BrowserActions): Promise<void> {
+	await browser.press("Enter");
+}
+
 // ---------------------------------------------------------------------------
 // File upload actions
 // ---------------------------------------------------------------------------

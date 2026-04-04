@@ -7,6 +7,7 @@ import {
 	clickComposer,
 	typePrompt,
 	clickSend,
+	sendPrompt,
 	clickAddFiles,
 } from "./chatgpt.actions";
 import { buildAssistantMessagesScript } from "./chatgpt.assertions";
@@ -69,6 +70,13 @@ export class ChatGPTPage extends BasePage {
 	public async clickSend(browser: BrowserActions): Promise<void> {
 		await clickSend(browser);
 	}
+
+	/** Submit prompt using Enter key (preferred over clickSend) */
+	public async sendPrompt(browser: BrowserActions): Promise<void> {
+		await sendPrompt(browser);
+	}
+
+	/** Click the add files button */
 
 	/** Click the add files button */
 	public async clickAddFiles(browser: BrowserActions): Promise<boolean> {
