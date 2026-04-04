@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { readLockProcessPid, isProcessAlive, maybeReclaimStaleLock, sleep } from "../shared/helpers";
 
 const ORACLE_STATE_DIR = "/tmp/pi-oracle-state";
 const LOCKS_DIR = join(ORACLE_STATE_DIR, "locks");
@@ -45,42 +46,10 @@ function leasePath(kind: string, key: string): string {
   return join(getLeasesDir(), leaseKey(kind, key));
 }
 
-async function sleep(ms: number): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, ms));
-}
+// sleep, readLockProcessPid, isProcessAlive, maybeReclaimStaleLock — imported from shared/helpers
 
 async function writeMetadata(path: string, metadata: unknown): Promise<void> {
   await writeFile(join(path, "metadata.json"), `${JSON.stringify(metadata, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-}
-
-function readLockProcessPid(path: string): number | undefined {
-  const metadataPath = join(path, "metadata.json");
-  if (!existsSync(metadataPath)) return undefined;
-  try {
-    const metadata = JSON.parse(readFileSync(metadataPath, "utf8")) as { processPid?: unknown };
-    return typeof metadata.processPid === "number" && Number.isInteger(metadata.processPid) && metadata.processPid > 0
-      ? metadata.processPid
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ESRCH") return false;
-    return true;
-  }
-}
-
-async function maybeReclaimStaleLock(path: string): Promise<boolean> {
-  const processPid = readLockProcessPid(path);
-  if (!processPid || isProcessAlive(processPid)) return false;
-  await rm(path, { recursive: true, force: true }).catch(() => undefined);
-  return true;
 }
 
 export async function acquireLock(
