@@ -152,6 +152,8 @@ const browserActions: BrowserActions = {
 	evaluate: (pageId: string, script: string) => browser.evaluate(pageId, script),
 	clickRef: (ref: string, pageIdHint?: string) => browser.clickRef(ref, pageIdHint),
 	fill: (ref: string, text: string, pageIdHint?: string) => browser.fill(ref, text, pageIdHint),
+	type: (text: string, pageId?: string) => browser.type(text, pageId),
+	press: (key: string, pageId?: string) => browser.press(key, pageId),
 	screenshot: (dest: string, pageId?: string) => browser.screenshot(dest, pageId),
 	getMainPageId: () => browser.getMainPageId(),
 };

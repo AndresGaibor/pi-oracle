@@ -14,6 +14,10 @@ export interface BrowserActions {
 	clickRef(refOrToken: string, pageIdHint?: string): Promise<void>;
 	/** Fill text into an element */
 	fill(refOrToken: string, text: string, pageIdHint?: string): Promise<void>;
+	/** Type text into a focused element (like contenteditable) */
+	type(text: string, pageId?: string): Promise<void>;
+	/** Press a keyboard key (e.g., 'Enter', 'Escape') */
+	press(key: string, pageId?: string): Promise<void>;
 	/** Take a screenshot */
 	screenshot(destPath: string, pageId?: string): Promise<void>;
 	/** Get the main page ID for evaluation */
