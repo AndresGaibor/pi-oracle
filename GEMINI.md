@@ -36,7 +36,7 @@
 ### Comandos
 
 - `/oracle <solicitud>`: Instruye al agente para recopilar contexto y despachar un trabajo de oráculo.
-- `/oracle-auth`: Sincroniza cookies de ChatGPT desde Chrome/Brave real al perfil seed aislado.
+- `/oracle-auth`: Sincroniza cookies de ChatGPT desde Brave real al perfil seed aislado.
 - `/oracle-status [job-id]`: Muestra el estado de los trabajos de oráculo.
 - `/oracle-cancel [job-id]`: Cancela un trabajo de oráculo activo.
 - `/oracle-clean <job-id|all>`: Elimina archivos temporales para trabajos no activos.

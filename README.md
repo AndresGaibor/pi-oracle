@@ -8,7 +8,7 @@ Existe para los casos difíciles donde quieres:
 - cargas de contexto de proyecto grande
 - ejecución asincrónica en segundo plano que despierta la sesión de `pi` original cuando termina
 
-Los trabajos normales de oráculo se ejecutan en un perfil de navegador aislado, no en la ventana activa de Chrome del usuario.
+Los trabajos normales de oráculo se ejecutan en un perfil de navegador aislado, no en la ventana activa de Brave del usuario.
 
 Estado: beta pública experimental, validada principalmente en macOS.
 
@@ -49,8 +49,8 @@ El objetivo es obtener respuestas sólidas del modelo web de ChatGPT sin:
 
 Actualmente validado para:
 - macOS
-- Google Chrome local
-- inicio de sesión web local de ChatGPT en Chrome
+- Brave Browser local
+- inicio de sesión web local de ChatGPT en Brave
 - perfil de seed de auth aislado + clones de perfil de runtime por trabajo
 - trabajos concurrentes en diferentes proyectos/sesiones
 - exclusión de misma conversación para seguimientos
@@ -65,8 +65,8 @@ Aún no prometido:
 ## Requisitos
 
 - macOS
-- Google Chrome o Brave Browser instalado
-- ChatGPT ya iniciado en un perfil local de Chrome
+- Brave Browser instalado
+- ChatGPT ya iniciado en un perfil local de Brave
 - `pi` instalado
 - navegadores de `playwright` instalados (`bunx playwright install`)
 - `tar` y `zstd` disponibles
@@ -87,7 +87,7 @@ pi install https://github.com/AndresGaibor/pi-oracle
 
 ## Configuración inicial
 
-1. Asegúrate de que ChatGPT ya funcione en tu perfil local de Chrome.
+1. Asegúrate de que ChatGPT ya funcione en tu perfil local de Brave.
 2. Configura el oráculo si es necesario via `~/.pi/agent/extensions/oracle.json`.
 3. Ejecuta `/oracle-auth`.
 4. Ejecuta una pequeña prueba de `/oracle`.
@@ -103,8 +103,8 @@ Configuraciones comunes:
 - `browser.executablePath`
 - `browser.authSeedProfileDir`
 - `browser.runtimeProfilesDir`
-- `auth.chromeProfile`
-- `auth.chromeCookiePath`
+- `auth.braveProfile`
+- `auth.braveCookiePath`
 
 La configuración del proyecto debe solo sobrescribir configuraciones seguras y sin privilegios.
 
@@ -115,7 +115,7 @@ Docs detallados de diseño y para mantenedores:
 ## Privacidad / datos locales
 
 Esta extensión es local-first, pero lee y persiste datos locales:
-- `/oracle-auth` lee cookies de ChatGPT de un perfil local de Chrome
+- `/oracle-auth` lee cookies de ChatGPT de un perfil local de Brave
 - los archivos de trabajos se cargan en ChatGPT.com
 - respuestas y artefactos se escriben bajo `/tmp/oracle-<job-id>/`
 
