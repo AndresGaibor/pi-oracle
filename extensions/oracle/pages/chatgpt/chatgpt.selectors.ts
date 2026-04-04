@@ -3,6 +3,58 @@
  * When ChatGPT UI changes, update this file only.
  */
 
+// =============================================================================
+// SELECTORES data-testid (PRIORITARIOS, ESTABLES)
+// Estos son los selectores principales. Usar siempre estos cuando sea posible.
+// Los data-testid son mantenidos por los ingenieros de OpenAI para sus tests
+// internos y son la superficie de selección más confiable.
+// =============================================================================
+
+export const CHATGPT_TESTIDS = {
+	// --- Navegación ---
+	NEW_CHAT_BUTTON: 'create-new-chat-button',
+	MODEL_SWITCHER: 'model-switcher-dropdown-button',
+	SHARE_CHAT: 'share-chat-button',
+	CONVERSATION_OPTIONS: 'conversation-options-button',
+	CLOSE_SIDEBAR: 'close-sidebar-button',
+	PROFILE_BUTTON: 'accounts-profile-button',
+
+	// --- Composer ---
+	COMPOSER_PLUS_BTN: 'composer-plus-btn',
+	SEND_BUTTON: 'send-button',
+	STOP_BUTTON: 'stop-button',
+
+	// --- Mensajes ---
+	COPY_TURN_ACTION: 'copy-turn-action-button',
+	GOOD_RESPONSE: 'good-response-turn-action-button',
+	BAD_RESPONSE: 'bad-response-turn-action-button',
+} as const;
+
+// =============================================================================
+// SELECTORES por atributos semánticos
+// Atributos HTML que OpenAI mantiene por razones de accesibilidad (a11y).
+// =============================================================================
+
+export const CHATGPT_SEMANTIC_SELECTORS = {
+	// --- Estructura ---
+	PROMPT_TEXTAREA: '#prompt-textarea',
+	THREAD: '#thread',
+	HISTORY_CONTAINER: '#history',
+
+	// --- Mensajes ---
+	USER_MESSAGE: '[data-message-author-role="user"]',
+	ASSISTANT_MESSAGE: '[data-message-author-role="assistant"]',
+	UPLOAD_FILES_INPUT: 'input#upload-files[type="file"]',
+	UPLOAD_PHOTOS_INPUT: 'input#upload-photos[type="file"]',
+
+	// --- Streaming ---
+	STREAM_ACTIVE: '.group\\/scroll-root[data-stream-active="true"]',
+	SCROLL_TO_BOTTOM: 'button[aria-label="Ir al final"]',
+
+	// --- Historial ---
+	CHAT_HISTORY_ITEMS: '#history [data-sidebar-item="true"]',
+} as const;
+
 // ---------------------------------------------------------------------------
 // URLs
 // ---------------------------------------------------------------------------
@@ -84,6 +136,10 @@ export const CHATGPT_SELECTORS = {
 // Text labels – for snapshot-based matching (multilingual)
 // ---------------------------------------------------------------------------
 
+/** @deprecated Usar CHATGPT_TESTIDS y CHATGPT_SEMANTIC_SELECTORS en su lugar.
+ *  Mantener como fallback pero NO usar como estrategia primaria.
+ *  Las text labels pueden cambiar con i18n, rediseños, o actualizaciones de copy.
+ */
 export const CHATGPT_LABELS = {
 	composer: [
 		"Chat with ChatGPT",

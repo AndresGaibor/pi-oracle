@@ -3,8 +3,21 @@
  * Each method performs a concrete action using the BrowserActions interface.
  */
 import type { BrowserActions } from "../browser-actions.types";
-import { parseSnapshotEntries, type ParsedSnapshotEntry } from "../../shared/snapshot-utils";
+import { parseSnapshotEntries, findLabeledEntry as findLabeledEntryFromUtils, type ParsedSnapshotEntry } from "../../shared/snapshot-utils";
 import { CHATGPT_SELECTORS, CHATGPT_LABELS, labelMatches } from "./chatgpt.selectors";
+
+/**
+ * Helper wrapper that parses snapshot and finds labeled entry.
+ * Uses the canonical findLabeledEntry from snapshot-utils.
+ */
+function findLabeledEntry(
+	snapshot: string,
+	kind: string,
+	labels: readonly string[],
+): ParsedSnapshotEntry | undefined {
+	const entries = parseSnapshotEntries(snapshot);
+	return findLabeledEntryFromUtils(entries, kind, labels);
+}
 
 // ---------------------------------------------------------------------------
 // Composer actions
@@ -72,17 +85,4 @@ export async function clickClose(browser: BrowserActions): Promise<boolean> {
 	return true;
 }
 
-// ---------------------------------------------------------------------------
-// Utility: find labeled entry in snapshot
-// ---------------------------------------------------------------------------
-
-function findLabeledEntry(
-	snapshot: string,
-	kind: string,
-	labels: readonly string[],
-): ParsedSnapshotEntry | undefined {
-	return parseSnapshotEntries(snapshot).find(
-		(e) => e.kind === kind && labelMatches(e.label, labels) && !e.disabled,
-	);
-}
 

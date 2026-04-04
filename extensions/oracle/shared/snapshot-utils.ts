@@ -1,5 +1,4 @@
 // shared/snapshot-utils.ts - Snapshot parsing utilities (extracted from workers)
-import type { SnapshotEntry } from "../pages/base.page";
 
 export interface ParsedSnapshotEntry {
 	line: string;
@@ -85,6 +84,20 @@ export function filterByKind(
 	kind: string,
 ): ParsedSnapshotEntry[] {
 	return entries.filter((e) => e.kind === kind);
+}
+
+/**
+ * Busca una entrada en el snapshot por kind y labels (case-insensitive, substring).
+ * Utilidad común usada por actions y assertions de ChatGPT.
+ */
+export function findLabeledEntry(
+	entries: ParsedSnapshotEntry[],
+	kind: string,
+	labels: readonly string[],
+): ParsedSnapshotEntry | undefined {
+	return entries.find(
+		(e) => e.kind === kind && labelMatches(e.label, labels) && !e.disabled,
+	);
 }
 
 /**

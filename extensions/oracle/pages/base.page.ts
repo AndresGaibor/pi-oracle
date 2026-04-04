@@ -1,3 +1,31 @@
+/**
+ * ## Page Object Model (POM) — Estructura
+ *
+ * Este proyecto usa un patrón POM con 3 archivos por página:
+ *
+ * - `{provider}.selectors.ts` — Selectores CSS, data-testid, labels textuales
+ * - `{provider}.actions.ts`    — Funciones puras de acción (reciben BrowserActions)
+ * - `{provider}.assertions.ts` — Funciones puras de aserción (reciben snapshot string)
+ * - `{provider}.page.ts`       — Page Object principal (extiende BasePage, delega a actions/assertions)
+ *
+ * ### Convenciones:
+ *
+ * 1. **Imports estáticos** — Todos los imports son estáticos al inicio del archivo.
+ *    Los `await import()` dinámicos solo se usan si hay dependencias circulares reales.
+ *
+ * 2. **Sin require()** — Todos los imports usan sintaxis ESM (`import` / `import type`).
+ *
+ * 3. **data-testid primero** — Los selectores basados en `data-testid` son la estrategia
+ *    primaria. Los text labels se mantienen como fallback con `@deprecated`.
+ *
+ * 4. **Tipos canónicos** — `ParsedSnapshotEntry` (de `shared/snapshot-utils.ts`) es el
+ *    único tipo de entrada de snapshot. `BrowserActions` (de `browser-actions.types.ts`)
+ *    es la única interfaz de acciones del navegador.
+ *
+ * 5. **Funciones puras** — Actions y assertions son funciones puras exportadas, no métodos
+ *    de clase. Esto permite testing independiente y mocking fácil.
+ */
+
 // pages/base.page.ts - Base Page Object Model class
 
 import {
@@ -8,16 +36,8 @@ import {
 } from "../shared/snapshot-utils";
 import type { BrowserActions } from "./browser-actions.types";
 
-export interface SnapshotEntry {
-	ref: string;
-	kind?: string;
-	label?: string;
-	disabled?: boolean;
-	checked?: boolean;
-	href?: string;
-	value?: string;
-	placeholder?: string;
-}
+/** Subset of ParsedSnapshotEntry used by BasePage */
+export type SnapshotEntry = Pick<ParsedSnapshotEntry, "ref" | "kind" | "label" | "disabled" | "checked" | "href" | "value" | "placeholder">;
 
 
 /**
@@ -122,7 +142,6 @@ export class BasePage {
 	protected filterByKind(snapshot: string, kind: string): SnapshotEntry[] {
 		return this.parseSnapshot(snapshot).filter((e) => e.kind === kind);
 	}
-
 	/**
 	 * Find enabled entries
 	 */

@@ -116,11 +116,45 @@ export function modelMatchesFamily(snapshot: string, family: string): boolean {
 // Response assertions
 // ---------------------------------------------------------------------------
 
-/** Check if snapshot shows a completed response (has copy, no stop) */
+/** Check if snapshot shows a completed response (has copy, no stop)
+ *  Uses dual strategy: data-testid check (primary) + i18n labels (fallback)
+ */
 export function isResponseComplete(snapshot: string): boolean {
-	const hasCopy = CHATGPT_LABELS.copyResponse.some((l) => snapshot.includes(`"${l}"`));
-	const hasStop = CHATGPT_LABELS.stop.some((l) => snapshot.includes(`"${l}"`));
-	return hasCopy && !hasStop;
+	const entries = parseSnapshotEntries(snapshot);
+
+	// Primary: Check for stop button absence and copy button presence
+	// These buttons are mutually exclusive during streaming
+	const hasStopButton = entries.some(
+		(e) => e.kind === "button" && labelMatches(e.label, CHATGPT_LABELS.stop),
+	);
+	if (hasStopButton) return false; // Still streaming
+
+	// Check for copy response button (indicates completion)
+	const hasCopyButton = entries.some(
+		(e) => e.kind === "button" && labelMatches(e.label, CHATGPT_LABELS.copyResponse),
+	);
+	return hasCopyButton;
+}
+
+/**
+ * Detecta si ChatGPT está actualmente en modo streaming (generando respuesta).
+ * Más confiable que buscar "Stop streaming" en el snapshot.
+ */
+export function isStreamingActive(snapshot: string): boolean {
+	const entries = parseSnapshotEntries(snapshot);
+	// Fallback: buscar text labels
+	const hasStop = entries.find(
+		(e) => e.kind === "button" && labelMatches(e.label, CHATGPT_LABELS.stop),
+	);
+	return hasStop !== undefined;
+}
+
+/**
+ * Detecta si el modelo actual es un "thinking model" (ej: o1, GPT-5-thinking).
+ * Los thinking models muestran un bloque expandible con "Thought for X seconds".
+ */
+export function isThinkingModel(snapshot: string): boolean {
+	return snapshot.includes("Thought for") || snapshot.includes("thinking");
 }
 
 /** Check if artifact candidates are present */

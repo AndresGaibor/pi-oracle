@@ -2,6 +2,14 @@
 import { BasePage } from "../base.page";
 import type { BrowserActions } from "../browser-actions.types";
 import { classifyChatPage, type LoginProbeResult, type PageState } from "../../shared/login-utils";
+// Static imports (no dynamic await import())
+import {
+	clickComposer,
+	typePrompt,
+	clickSend,
+	clickAddFiles,
+} from "./chatgpt.actions";
+import { buildAssistantMessagesScript } from "./chatgpt.assertions";
 
 // Re-export sub-modules for consumers
 export type { BrowserActions } from "../browser-actions.types";
@@ -49,31 +57,26 @@ export class ChatGPTPage extends BasePage {
 
 	/** Click the composer textbox to focus it */
 	public async clickComposer(browser: BrowserActions): Promise<void> {
-		const { clickComposer } = await import("./chatgpt.actions");
 		await clickComposer(browser);
 	}
 
 	/** Type a prompt into the composer via JS (handles contenteditable) */
 	public async typePrompt(browser: BrowserActions, prompt: string): Promise<boolean> {
-		const { typePrompt } = await import("./chatgpt.actions");
 		return typePrompt(browser, prompt);
 	}
 
 	/** Click the send button */
 	public async clickSend(browser: BrowserActions): Promise<void> {
-		const { clickSend } = await import("./chatgpt.actions");
 		await clickSend(browser);
 	}
 
 	/** Click the add files button */
 	public async clickAddFiles(browser: BrowserActions): Promise<boolean> {
-		const { clickAddFiles } = await import("./chatgpt.actions");
 		return clickAddFiles(browser);
 	}
 
 	/** Get assistant messages from the page */
 	public async getAssistantMessages(browser: BrowserActions): Promise<Array<{ text: string }>> {
-		const { buildAssistantMessagesScript } = await import("./chatgpt.assertions");
 		const result = await browser.evaluate(browser.getMainPageId(), buildAssistantMessagesScript());
 
 		if (typeof result !== "string") return [];

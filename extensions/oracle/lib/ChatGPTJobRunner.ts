@@ -5,6 +5,37 @@
  *
  * Clean architecture: this is the application/service layer that coordinates
  * the infrastructure (browser) and domain (ChatGPTPage) layers.
+ *
+ * SNAPSHOT FORMAT & SELECTOR STRATEGY:
+ * ───────────────────────────────────────────────────────────────────────────────
+ * This class uses TEXT-LABEL-BASED selectors (snapshot format) as primary strategy:
+ *
+ * Snapshot text format (from agent-browser, accessibility tree):
+ *   button "Send prompt"
+ *   textbox "Message..." : placeholder value
+ *   combobox "Model" : "GPT-4o" selected
+ *   heading "ChatGPT said:"
+ *   link "download.json" href="/artifacts/...."
+ *   ref=e123 kind "label" [disabled] [checked]
+ *
+ * ADVANTAGES OF TEXT-LABEL SELECTORS:
+ *   ✓ DOM-agnostic: Works across UI re-renders, theme changes, layout restructures
+ *   ✓ Bilingual: Labels support multiple languages (English/Spanish variants)
+ *   ✓ Semantic: Matches user-visible text, not brittle CSS selectors
+ *   ✓ Accessibility: Based on ARIA/accessibility tree (screen reader compatible)
+ *   ✓ Stable: ChatGPT UI redesigns won't break labels like "Send" or "Copy response"
+ *   ✓ Readable: Code is self-documenting (snapshotHasLabel(snapshot, "button", "Send"))
+ *
+ * DISADVANTAGES OF DIRECT DOM SELECTORS:
+ *   ✗ Brittle: ChatGPT frequently changes data-testid values, button classes
+ *   ✗ Hidden overhead: CSS selectors don't work on unmounted DOM elements
+ *   ✗ Monolingual: Hard to support Spanish/other languages with querySelector
+ *   ✗ Implementation detail: Couples orchestration to ChatGPT's internal structure
+ *
+ * WHEN WE USE DOM QUERIES (data-testid):
+ *   - Message extraction: getAssistantMessages() uses data-testid (content extraction)
+ *   - Artifact navigation: Some ref-based clicks for specialized UI elements
+ *   - Hybrid approach: Snapshot for discovery, DOM for precise content access
  */
 import { existsSync } from "node:fs";
 import { readFile, stat, chmod, rm, mkdir, writeFile } from "node:fs/promises";
@@ -20,12 +51,24 @@ import { parseSnapshotEntries, findEntry, findLastEntry, type ParsedSnapshotEntr
 // ---------------------------------------------------------------------------
 // Labels – single source of truth, shared with ChatGPTPage
 // ---------------------------------------------------------------------------
+// Snapshot label definitions. Each label is a localization-aware array representing
+// the same UI element across languages. For example:
+//   send: ["Send prompt", "Send message", "Enviar prompt", "Enviar mensaje", "Enviar"]
+// When we call snapshotHasLabel(snapshot, "button", LABELS.send), we check if the
+// snapshot contains ANY of: button "Send prompt" OR button "Send message" OR ... etc.
+//
+// These are matched against text in the accessibility tree snapshot, NOT DOM.
+// See parseSnapshotEntries() in snapshot-utils.ts for snapshot parsing.
 
 const LABELS = {
 	...DEFAULT_LABELS,
+	// "Send" button for prompt submission – multilingual variants to handle ChatGPT's label changes
 	send: ["Send prompt", "Send message", "Enviar prompt", "Enviar mensaje", "Enviar"],
+	// Close button for dialogs/sidebars
 	close: ["Close", "Cerrar"],
+	// Model configuration/menu button
 	configure: ["Configure...", "Configurar..."],
+	// Thinking mode auto-switch toggle in advanced settings
 	autoSwitchToThinking: ["Auto-switch to Thinking", "Cambio automático a Thinking", "Cambio automático a Pensando"],
 };
 
@@ -153,6 +196,17 @@ function parseConversationId(chatUrl: string | undefined): string | undefined {
 	}
 }
 
+/**
+ * Check if snapshot contains a UI element with given kind and label.
+ *
+ * Example:
+ *   snapshotHasLabel(snapshot, "button", LABELS.send)
+ *   // returns true if snapshot contains: button "Send prompt" OR button "Send message" etc.
+ *
+ * This is the CORE selector function. It checks the accessibility tree snapshot
+ * (see snapshot-utils.parseSnapshotEntries) for exact text matches, making it
+ * DOM-agnostic and language-aware. Much more stable than querySelector("[data-testid=...]").
+ */
 function snapshotHasLabel(snapshot: string, kind: string, labels: readonly string[]): boolean {
 	return labels.some((label) => snapshot.includes(`${kind} "${label}"`));
 }
@@ -203,6 +257,20 @@ function snapshotWeaklyMatchesRequestedModel(snapshot: string, job: JobState): b
 	return false;
 }
 
+/**
+ * Detect if ChatGPT has finished streaming the response.
+ *
+ * LOGIC: When ChatGPT is streaming, the "Stop generating" button is visible.
+ * When complete, the "Copy response" button appears and "Stop" disappears.
+ *
+ * Uses snapshot labels instead of polling message.innerText for completion,
+ * which is MORE RELIABLE because:
+ *   - Detects actual UI state change (streaming button replaced with copy button)
+ *   - Avoids timing issues with text stabilization
+ *   - Works with both English and Spanish UIs (label variants in LABELS.stop/copyResponse)
+ *
+ * This is a SNAPSHOT-BASED completion detector, not a timeout-based one.
+ */
 function snapshotShowsCompletedResponse(snapshot: string): boolean {
 	const hasStopStreaming = snapshotHasLabel(snapshot, "button", LABELS.stop as unknown as readonly string[]);
 	const hasCopyResponse = snapshotHasLabel(snapshot, "button", LABELS.copyResponse as unknown as readonly string[]);
@@ -397,6 +465,26 @@ export class ChatGPTJobRunner {
 	// Wait for chat completion
 	// -----------------------------------------------------------------------
 
+	/**
+	 * Wait for ChatGPT to finish generating the response.
+	 *
+	 * SNAPSHOT-BASED COMPLETION DETECTION:
+	 * We poll TWO sources:
+	 *   1. Message text content (via getAssistantMessages) – waits for text to appear
+	 *   2. Snapshot buttons (via snapshotShowsCompletedResponse) – waits for "Copy" button
+	 *
+	 * Both must be true + text must stabilize (3 consecutive identical reads) to confirm done.
+	 *
+	 * WHY NOT JUST WAIT FOR TEXT TO STOP CHANGING?
+	 * Because the snapshot button check is MORE RELIABLE:
+	 *   - Snapshot reflects actual UI state ("Stop generating" → "Copy response" transition)
+	 *   - No edge cases with text buffering or partial content
+	 *   - Works even if text briefly repeats (happens with streaming sometimes)
+	 *   - Language-aware: Works with Spanish UIs via label variants
+	 *
+	 * This is a HYBRID approach combining DOM content (message text) with
+	 * SNAPSHOT UI state (button visibility) for maximum reliability.
+	 */
 	async waitForChatCompletion(baselineAssistantCount: number): Promise<{ responseIndex: number; responseText: string }> {
 		const timeoutAt = Date.now() + this.job.config.worker.completionTimeoutMs;
 		let lastText = "";
@@ -408,12 +496,14 @@ export class ChatGPTJobRunner {
 			const messages = await this.chatGPT.getAssistantMessages(browserActions);
 			const targetMessage = messages[baselineAssistantCount];
 			const targetText = targetMessage?.text || "";
+			// Use snapshot to check if "Stop generating" button is gone and "Copy response" appeared
 			const hasCompletedResponse = snapshotShowsCompletedResponse(snapshot);
 
 			if (targetText && hasCompletedResponse) {
 				if (targetText === lastText) stableCount += 1;
 				else stableCount = 1;
 				lastText = targetText;
+				// Wait for 3 consecutive stable reads to be confident
 				if (stableCount >= 3) {
 					return { responseIndex: baselineAssistantCount, responseText: targetText };
 				}
@@ -533,8 +623,29 @@ export class ChatGPTJobRunner {
 		return `/tmp/oracle-${this.job.id}`;
 	}
 
+	/**
+	 * Extract the snapshot slice containing a specific assistant response.
+	 *
+	 * SNAPSHOT PARSING STRATEGY:
+	 * The full page snapshot contains multiple sections (user messages, assistant messages, UI controls).
+	 * We slice it by finding the "ChatGPT said:" heading at index responseIndex, then extract
+	 * everything until the next "ChatGPT said:" or the composer box (message input).
+	 *
+	 * This is MUCH BETTER than using DOM .querySelectorAll("[data-testid=message]") because:
+	 *   1. The snapshot is a static accessibility tree (no CSS selector brittleness)
+	 *   2. Multilingual: Works with "ChatGPT said:" (English) and "ChatGPT dijo:" (Spanish)
+	 *   3. Immune to UI reflows: The snapshot captures the layout at snapshot time
+	 *   4. Artifact detection: We can search the slice for file-like button labels
+	 *
+	 * Example snapshot slice:
+	 *   heading "ChatGPT said:" ref=e456
+	 *   - button "Click to open artifact" ref=e457
+	 *   - button "Download code.js" ref=e458 href="..."
+	 *   - textbox "Message..." ref=e459
+	 */
 	private assistantSnapshotSlice(snapshot: string, responseIndex: number): string | undefined {
 		const lines = snapshot.split("\n");
+		// Find all "ChatGPT said:" heading lines (one per assistant response)
 		const assistantHeadingIndices = lines.flatMap((line, index) =>
 			line.includes('heading "ChatGPT said:"') || line.includes('heading "ChatGPT dijo:"') ? [index] : [],
 		);
@@ -542,9 +653,11 @@ export class ChatGPTJobRunner {
 		if (startIndex === undefined) return undefined;
 
 		const endCandidates: number[] = [];
+		// End at next assistant response
 		const nextAssistantIndex = assistantHeadingIndices[responseIndex + 1];
 		if (nextAssistantIndex !== undefined) endCandidates.push(nextAssistantIndex);
 
+		// Or end at composer box (message input)
 		const composerIndex = lines.findIndex(
 			(line, index) => index > startIndex && snapshotHasLabel(line, "textbox", LABELS.composer),
 		);
@@ -587,6 +700,20 @@ export class ChatGPTJobRunner {
 		return latest;
 	}
 
+	/**
+	 * Scan the assistant's response in the snapshot for downloadable artifact buttons.
+	 *
+	 * ARTIFACT DETECTION VIA SNAPSHOT:
+	 * We parse the assistant message slice and look for button/link entries with
+	 * file-like labels (e.g., "script.py", "report.pdf", "data.csv").
+	 *
+	 * This is SNAPSHOT-BASED, not DOM-based, so we:
+	 *   - Get a stable list of candidates (snapshot is immutable at poll time)
+	 *   - Don't have to worry about lazy-loading or React re-renders
+	 *   - Can easily filter by button/link kind using parseSnapshotEntries()
+	 *
+	 * See artifactCandidatesFromEntries() for filtering logic.
+	 */
 	private async collectArtifactCandidates(responseIndex: number) {
 		const snapshot = await browser.snapshotText();
 		const targetSlice = this.assistantSnapshotSlice(snapshot, responseIndex);
@@ -594,6 +721,7 @@ export class ChatGPTJobRunner {
 		return {
 			snapshot,
 			targetSlice,
+			// Parse snapshot entries and find buttons/links that look like downloadable files
 			candidates: artifactCandidatesFromEntries(parseSnapshotEntries(targetSlice)),
 		};
 	}
