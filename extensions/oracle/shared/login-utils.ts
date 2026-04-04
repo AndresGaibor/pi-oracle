@@ -1,3 +1,4 @@
+import { CHATGPT_LABELS } from "../pages/chatgpt/chatgpt.selectors";
 // shared/login-utils.ts - Login and session utilities (extracted from workers)
 
 /**
@@ -269,23 +270,6 @@ export function classifyChatPage(params: {
 
 	return { state: "unknown", message: "Unable to determine page state" };
 }
-
-// ---- Helper functions ----
-
-const CHATGPT_LABELS = {
-	composer: [
-		"Message ChatGPT",
-		"Escribe un mensaje",
-		"Pregunta lo que quieras",
-		"textbox",
-	],
-	addFiles: ["Add files", "Subir archivos", "Adjuntar archivos"],
-	modelSelector: ["GPT-4o", "GPT-4", "GPT-3.5", "ChatGPT", "Model"],
-	newChat: ["New chat", "Nuevo chat"],
-	send: ["Send", "Enviar"],
-	stop: ["Stop", "Detener"],
-};
-
 function snapshotHasLabel(
 	snapshot: string,
 	kind: string,
