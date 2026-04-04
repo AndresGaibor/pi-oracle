@@ -4,7 +4,7 @@
 	"description": "ChatGPT web-oracle extension for pi with isolated browser auth, async jobs, and project-context archives.",
 	"private": false,
 	"license": "MIT",
-"author": "Andres Gaibor (https://github.com/AndresGaibor)",
+	"author": "Andres Gaibor (https://github.com/AndresGaibor)",
 	"type": "module",
 	"keywords": [
 		"pi-package",
@@ -21,7 +21,7 @@
 	"bugs": {
 		"url": "https://github.com/AndresGaibor/pi-oracle/issues"
 	},
-"homepage": "https://github.com/AndresGaibor/pi-oracle#readme",
+	"homepage": "https://github.com/AndresGaibor/pi-oracle#readme",
 	"publishConfig": {
 		"access": "public"
 	},
@@ -43,16 +43,24 @@
 		"playwright-check": "bun scripts/playwright-check.ts",
 		"debug:headed": "bun run scripts/debug-headed.ts",
 		"test:cookies": "bun run scripts/test-cookies.ts",
-		"watch:cookies": "bun run scripts/watch-cookies.ts"
+		"watch:cookies": "bun run scripts/watch-cookies.ts",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"test:coverage": "vitest run --coverage",
+		"test:e2e": "playwright test",
+		"test:e2e:ui": "playwright test --ui"
 	},
 	"dependencies": {
 		"@steipete/sweet-cookie": "^0.2.0"
 	},
 	"devDependencies": {
+		"@types/node": "^25.5.2",
+		"@vitest/coverage-v8": "^4.1.2",
 		"esbuild": "^0.27.0",
 		"playwright": "^1.59.1",
 		"tsx": "^4.20.6",
-		"typescript": "^5.3.3"
+		"typescript": "^5.3.3",
+		"vitest": "^4.1.2"
 	},
 	"engines": {
 		"node": ">=20"

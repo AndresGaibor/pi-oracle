@@ -10,3 +10,4 @@ adapter-tests/tmp-profile/
 *.tsbuildinfo
 dist/
 .ant-colony/
+.auth/
