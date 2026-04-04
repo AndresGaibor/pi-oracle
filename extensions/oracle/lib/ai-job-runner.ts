@@ -38,10 +38,8 @@
  *   - Hybrid approach: Snapshot for discovery, DOM for precise content access
  */
 import { existsSync } from "node:fs";
-import { readFile, stat, chmod, rm, mkdir, writeFile } from "node:fs/promises";
+import { stat, chmod, rm, rename } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
 import * as browser from "../lib/browser";
 import type { AIProviderPage } from "../pages/ai-provider.types";
 import type { BrowserActions } from "../pages/browser-actions.types";
@@ -49,6 +47,7 @@ import { CHATGPT_LABELS as DEFAULT_LABELS, MODEL_FAMILY_PREFIX, EFFORT_LABELS } 
 import { parseSnapshotEntries, findEntry, findLastEntry, labelMatches, type ParsedSnapshotEntry } from "../shared/snapshot-utils";
 import { isResponseComplete, findArtifactCandidates, preferredArtifactName } from "../pages/chatgpt/chatgpt.assertions";
 import { CHAT_URL_POLL_MS, CHAT_URL_STABLE_COUNT, CONVERSATION_REOPEN_SETTLE_MS, ARTIFACT_RETRY_SETTLE_MS, ARTIFACT_CANDIDATE_STABILITY_TIMEOUT_MS, ARTIFACT_CANDIDATE_STABILITY_POLL_MS, ARTIFACT_CANDIDATE_STABILITY_POLLS, ARTIFACT_DOWNLOAD_HEARTBEAT_MS, ARTIFACT_DOWNLOAD_TIMEOUT_MS, ARTIFACT_DOWNLOAD_MAX_ATTEMPTS } from "./constants";
+import { ensurePrivateDir, secureWriteText, sha256File as sha256, detectType, stripQuery, parseConversationId, snapshotHasLabel, sleep } from "../shared/helpers";
 // ---------------------------------------------------------------------------
 // Labels – single source of truth, shared with ChatGPTPage
 // ---------------------------------------------------------------------------
@@ -171,149 +170,9 @@ function allEffortLabels(): string[] {
 	return [...new Set(Object.values(EFFORT_LABELS).flat())];
 }
 
-function stripQuery(url: string): string {
-	try {
-		const parsed = new URL(url);
-		parsed.hash = "";
-		parsed.search = "";
-		return parsed.toString();
-	} catch {
-		return url;
-	}
-}
+// stripQuery, parseConversationId, ensurePrivateDir, secureWriteText, sha256, detectType, sleep — imported from ../shared/helpers
 
-function parseConversationId(chatUrl: string | undefined): string | undefined {
-	if (!chatUrl) return undefined;
-	try {
-		const parsed = new URL(chatUrl);
-		const match = parsed.pathname.match(/\/c\/([^/?#]+)/i);
-		return match?.[1];
-	} catch {
-		return undefined;
-	}
-}
-
-/**
- * Check if snapshot contains a UI element with given kind and label.
- *
- * Example:
- *   snapshotHasLabel(snapshot, "button", LABELS.send)
- *   // returns true if snapshot contains: button "Send prompt" OR button "Send message" etc.
- *
- * This is the CORE selector function. It checks the accessibility tree snapshot
- * (see snapshot-utils.parseSnapshotEntries) for exact text matches, making it
- * DOM-agnostic and language-aware. Much more stable than querySelector("[data-testid=...]").
- */
-function snapshotHasLabel(snapshot: string, kind: string, labels: readonly string[]): boolean {
-	return labels.some((label) => snapshot.includes(`${kind} "${label}"`));
-}
-
-function effortSelectionVisible(snapshot: string, effortLabel: string | undefined): boolean {
-	if (!effortLabel) return true;
-	const labels = effortLabelsFor(effortLabel);
-	const entries = parseSnapshotEntries(snapshot);
-	return entries.some((entry) => {
-		if (entry.disabled) return false;
-		if (entry.kind === "combobox" && labels.includes(entry.value || "")) return true;
-		if (entry.kind !== "button") return false;
-		const label = String(entry.label || "").toLowerCase();
-		return labels.some((candidate) => {
-			const normalizedEffort = candidate.toLowerCase();
-			return (
-				label === normalizedEffort ||
-				label === `${normalizedEffort} thinking` ||
-				label === `${normalizedEffort}, click to remove` ||
-				label === `${normalizedEffort} thinking, click to remove`
-			);
-		});
-	});
-}
-
-function thinkingChipVisible(snapshot: string): boolean {
-	return /button "(?:Light|Standard|Extended|Heavy|Ligero|Estándar|Ampliado|Extendido|Alto|Razonamiento ampliado)(?: thinking)?(?:, click to remove)?"/i.test(snapshot);
-}
-
-function matchesModelFamilyButton(candidate: ParsedSnapshotEntry, family: string): boolean {
-	return candidate.kind === "button" && typeof candidate.label === "string" && candidate.label.startsWith(MODEL_FAMILY_PREFIX[family]) && !candidate.disabled;
-}
-
-function snapshotStronglyMatchesRequestedModel(snapshot: string, job: JobState): boolean {
-	const entries = parseSnapshotEntries(snapshot);
-	const familyMatched = entries.some((entry) => matchesModelFamilyButton(entry, job.chatModelFamily || "instant"));
-	if (job.chatModelFamily === "thinking") {
-		return familyMatched || effortSelectionVisible(snapshot, job.effort);
-	}
-	if (job.chatModelFamily === "pro") return familyMatched;
-	return familyMatched;
-}
-
-function snapshotWeaklyMatchesRequestedModel(snapshot: string, job: JobState): boolean {
-	if (job.chatModelFamily === "thinking") return effortSelectionVisible(snapshot, job.effort);
-	if (job.chatModelFamily === "pro") return !thinkingChipVisible(snapshot);
-	if (job.chatModelFamily === "instant") return !thinkingChipVisible(snapshot);
-	return false;
-}
-
-/**
- * Detect if ChatGPT has finished streaming the response.
- *
- * LOGIC: When ChatGPT is streaming, the "Stop generating" button is visible.
- * When complete, the "Copy response" button appears and "Stop" disappears.
- *
- * Uses snapshot labels instead of polling message.innerText for completion,
- * which is MORE RELIABLE because:
- *   - Detects actual UI state change (streaming button replaced with copy button)
- *   - Avoids timing issues with text stabilization
- *   - Works with both English and Spanish UIs (label variants in LABELS.stop/copyResponse)
- *
- * This is a SNAPSHOT-BASED completion detector, not a timeout-based one.
- */
-// Snapshot-based completion detector delegates to chatgpt.assertions.isResponseComplete
-function snapshotShowsCompletedResponse(snapshot: string): boolean {
-	return isResponseComplete(snapshot);
-}
-
-
-
-
-
-async function ensurePrivateDir(path: string): Promise<void> {
-	await mkdir(path, { recursive: true, mode: 0o700 });
-	await chmod(path, 0o700).catch(() => undefined);
-}
-
-async function secureWriteText(path: string, content: string): Promise<void> {
-	const tmpPath = `${path}.${process.pid}.${Date.now()}.tmp`;
-	await writeFile(tmpPath, content, { encoding: "utf8", mode: 0o600 });
-	await chmod(tmpPath, 0o600).catch(() => undefined);
-	await renameSafe(tmpPath, path);
-	await chmod(path, 0o600).catch(() => undefined);
-}
-
-async function renameSafe(oldPath: string, newPath: string): Promise<void> {
-	const { rename } = await import("node:fs/promises");
-	await rename(oldPath, newPath);
-}
-
-async function sha256(path: string): Promise<string> {
-	const { readFile } = await import("node:fs/promises");
-	const buffer = await readFile(path);
-	return createHash("sha256").update(buffer).digest("hex");
-}
-
-async function detectType(path: string): Promise<string> {
-	return new Promise((resolve) => {
-		const child = spawn("file", ["-b", path], { stdio: ["ignore", "pipe", "pipe"] });
-		let stdout = "";
-		child.stdout.on("data", (d) => { stdout += String(d); });
-		child.on("close", () => resolve(stdout.trim() || "unknown"));
-		child.on("error", () => resolve("unknown"));
-	});
-}
-
-function sleep(ms: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
-}
+const snapshotShowsCompletedResponse = isResponseComplete;
 
 // ---------------------------------------------------------------------------
 // AIJobRunner
