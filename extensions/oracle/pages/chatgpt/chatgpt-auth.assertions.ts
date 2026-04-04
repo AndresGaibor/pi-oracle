@@ -1,44 +1,10 @@
 /**
  * ChatGPT Auth Assertions – state checks for authentication flow.
  */
+import { parseSnapshotEntries, type ParsedSnapshotEntry } from "../../shared/snapshot-utils";
 import { AUTH_LABELS, AUTH_SELECTORS, CHALLENGE_PATTERNS, OUTAGE_PATTERNS, labelMatches } from "./chatgpt-auth.selectors";
 import { buildLoginProbeScript, type LoginProbeResult } from "../../shared/login-utils";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface SnapshotEntry {
-	ref: string;
-	kind?: string;
-	label?: string;
-	disabled?: boolean;
-	href?: string;
-}
-
-// ---------------------------------------------------------------------------
-// Snapshot parsing
-// ---------------------------------------------------------------------------
-
-function parseSnapshotEntries(snapshot: string): SnapshotEntry[] {
-	return snapshot
-		.split("\n")
-		.map((line) => {
-			const refMatch = line.match(/\bref=(e\d+|@e\d+)\b/);
-			if (!refMatch) return undefined;
-			const kindMatch = line.match(/^\s*-\s*([^\s]+)/);
-			const quotedMatch = line.match(/"([^"]*)"/);
-			const hrefMatch = line.match(/href="([^"]+)"/);
-			return {
-				ref: refMatch[1].startsWith("@") ? refMatch[1] : `@${refMatch[1]}`,
-				kind: kindMatch ? kindMatch[1] : undefined,
-				label: quotedMatch ? quotedMatch[1] : undefined,
-				href: hrefMatch ? hrefMatch[1] : undefined,
-				disabled: /\bdisabled\b/.test(line),
-			};
-		})
-		.filter(Boolean) as SnapshotEntry[];
-}
 
 // ---------------------------------------------------------------------------
 // Auth state assertions
@@ -126,4 +92,4 @@ export function parseLoginProbeResult(result: unknown): LoginProbeResult | null 
 // ---------------------------------------------------------------------------
 
 export { parseSnapshotEntries };
-export type { SnapshotEntry };
+export type { ParsedSnapshotEntry as SnapshotEntry };
